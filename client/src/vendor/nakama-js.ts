@@ -30,6 +30,13 @@ export interface MatchmakerMatched {
 
 export class Socket {
   private ws: WebSocket | null = null;
+  private pendingMatchJoin:
+    | {
+        resolve: (match: Match) => void;
+        reject: (error: Error) => void;
+        timer: ReturnType<typeof setTimeout>;
+      }
+    | null = null;
   onmatchdata?: (data: MatchData) => void;
   onmatchmakermatched?: (matched: MatchmakerMatched) => void;
   ondisconnect?: () => void;
@@ -47,9 +54,28 @@ export class Socket {
     this.ws.onclose = () => this.ondisconnect?.();
     this.ws.onmessage = (evt) => {
       const msg = JSON.parse(String(evt.data));
+
+      if (msg.match) {
+        if (this.pendingMatchJoin) {
+          const pending = this.pendingMatchJoin;
+          this.pendingMatchJoin = null;
+          clearTimeout(pending.timer);
+          pending.resolve({ match_id: msg.match.match_id });
+        }
+      }
+
+      if (msg.error && this.pendingMatchJoin) {
+        const pending = this.pendingMatchJoin;
+        this.pendingMatchJoin = null;
+        clearTimeout(pending.timer);
+        pending.reject(new Error(msg.error.message ?? "Failed to join match"));
+      }
+
       if (msg.match_data?.op_code !== undefined) {
+        const opCode = Number(msg.match_data.op_code);
+        if (Number.isNaN(opCode)) return;
         this.onmatchdata?.({
-          op_code: msg.match_data.op_code,
+          op_code: opCode,
           data: b64ToBytes(msg.match_data.data ?? ""),
         });
       }
@@ -65,11 +91,30 @@ export class Socket {
   }
 
   async joinMatch(matchIdOrToken: string): Promise<Match> {
-    const isTokenJoin = matchIdOrToken.split(".").length === 3;
-    this.send({
-      match_join: isTokenJoin ? { token: matchIdOrToken } : { match_id: matchIdOrToken },
+    const isTokenJoin = isJwtToken(matchIdOrToken);
+    if (this.pendingMatchJoin) {
+      throw new Error("Already joining a match");
+    }
+
+    return new Promise<Match>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.pendingMatchJoin) return;
+        this.pendingMatchJoin = null;
+        reject(new Error("Timed out while joining match"));
+      }, 5000);
+
+      this.pendingMatchJoin = { resolve, reject, timer };
+
+      try {
+        this.send({
+          match_join: isTokenJoin ? { token: matchIdOrToken } : { match_id: matchIdOrToken },
+        });
+      } catch (err) {
+        clearTimeout(timer);
+        this.pendingMatchJoin = null;
+        reject(err instanceof Error ? err : new Error("Failed to send join request"));
+      }
     });
-    return { match_id: matchIdOrToken };
   }
 
   async sendMatchState(matchId: string, opCode: number, payload: string): Promise<void> {
@@ -94,6 +139,12 @@ export class Socket {
   }
 
   disconnect(): void {
+    if (this.pendingMatchJoin) {
+      const pending = this.pendingMatchJoin;
+      this.pendingMatchJoin = null;
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Socket disconnected"));
+    }
     this.ws?.close();
     this.ws = null;
   }
@@ -141,7 +192,7 @@ export class Client {
 
   async rpcHttpKey(httpKey: string, id: string, payload: string): Promise<RpcResponse> {
     const proto = this.useSsl ? "https" : "http";
-    const res = await fetch(`${proto}://${this.host}:${this.port}/v2/rpc/${id}?http_key=${encodeURIComponent(httpKey)}`, {
+    const res = await fetch(`${proto}://${this.host}:${this.port}/v2/rpc/${id}?http_key=${encodeURIComponent(httpKey)}&unwrap=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload || "{}",
@@ -152,7 +203,7 @@ export class Client {
 
   async rpc(session: Session, id: string, payload: string): Promise<RpcTokenResponse> {
     const proto = this.useSsl ? "https" : "http";
-    const res = await fetch(`${proto}://${this.host}:${this.port}/v2/rpc/${id}`, {
+    const res = await fetch(`${proto}://${this.host}:${this.port}/v2/rpc/${id}?unwrap=true`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -185,4 +236,20 @@ function b64ToBytes(b64: string): Uint8Array {
   const out = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
   return out;
+}
+
+function isJwtToken(value: string): boolean {
+  const parts = value.split(".");
+  if (parts.length !== 3) return false;
+
+  try {
+    const payload = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
+    const decoded = JSON.parse(atob(payload));
+    return typeof decoded === "object" && decoded !== null;
+  } catch {
+    return false;
+  }
 }
