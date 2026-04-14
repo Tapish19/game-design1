@@ -174,15 +174,33 @@ async function callRpc(
   payload: string
 ): Promise<{ payload?: string }> {
   const client = getClient() as any;
+  const normalize = (res: any): { payload?: string } => {
+    // Wrapped Nakama RPC response shape: { payload: string }
+    if (res && typeof res.payload === "string") {
+      return { payload: res.payload };
+    }
+    // Unwrapped response can be raw JSON/string.
+    if (typeof res === "string") {
+      return { payload: res };
+    }
+    if (res == null) {
+      return { payload: "" };
+    }
+    return { payload: JSON.stringify(res) };
+  };
 
-    // Try token-auth RPC first when a session is available.
+  // Try token-auth RPC first when a session is available.
   if (_session && typeof client.rpc === "function") {
-      return await client.rpc(_session, id, payload);
+    try {
+      return normalize(await client.rpc(_session, id, payload));
+    } catch {
+      // Fall through to HTTP key RPC as a compatibility fallback.
+    }
   }
 
   // ✅ Fallback for older SDK / http_key RPC
   if (typeof client.rpcHttpKey === "function") {
-    return client.rpcHttpKey(HTTP_KEY, id, payload);
+    return normalize(await client.rpcHttpKey(HTTP_KEY, id, payload));
   }
 
   throw new Error("No compatible RPC method found on Nakama client");

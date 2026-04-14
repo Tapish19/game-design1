@@ -28,7 +28,9 @@ export function Lobby({ onEnterMatch, onViewLeaderboard, myUsername }: LobbyProp
       const socket = getSocket()!;
 
       socket.onmatchmakermatched = async (matched) => {
-        const id = matched.match_id ?? matched.token;
+        // Matchmaker joins should prefer token when present.
+        // Token carries the reserved roster for this matched pair.
+        const id = matched.token ?? matched.match_id;
 
         // ✅ FIX: ensure id exists
         if (!id) {
