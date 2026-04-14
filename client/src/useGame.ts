@@ -52,9 +52,16 @@ export function useGame(): UseGameReturn {
     if (!socket) return;
 
     socket.onmatchdata = (data) => {
-      const payload = JSON.parse(new TextDecoder().decode(data.data));
+      let payload: any;
+      try {
+        payload = JSON.parse(new TextDecoder().decode(data.data));
+      } catch {
+        setError("Received invalid match payload from server.");
+        return;
+      }
 
-      switch (data.op_code) {
+      const opCode = Number(data.op_code);
+      switch (opCode) {
         case OpCode.GAME_STATE:
           setGameState(payload as GameState);
           setTimeLeft(payload.timeLeft ?? null);
@@ -71,6 +78,9 @@ export function useGame(): UseGameReturn {
           break;
         case OpCode.ERROR:
           setError(payload.message ?? "Server error");
+          break;
+        default:
+          // Ignore unknown opcodes so one bad frame does not break match flow.
           break;
       }
     };
@@ -89,10 +99,12 @@ export function useGame(): UseGameReturn {
     try {
       await openSocket();
       wireSocketEvents();
-      await joinMatchById(id);
-      matchIdRef.current = id;
-      setMatchId(id);
-      setGameState(EMPTY_BOARD);
+      const joinedMatch = await joinMatchById(id);
+      matchIdRef.current = joinedMatch.match_id;
+      setMatchId(joinedMatch.match_id);
+      // Do not clobber a real GAME_STATE that may have already arrived.
+      // In fast joins, Nakama can broadcast state before this line runs.
+      setGameState((prev) => prev ?? EMPTY_BOARD);
       return true;
     } catch (e: any) {
       closeSocket();
