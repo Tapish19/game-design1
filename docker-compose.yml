@@ -1,0 +1,50 @@
+services:
+  cockroachdb:
+    image: cockroachdb/cockroach:v23.2.3
+    command: start-single-node --insecure --store=attrs=ssd,path=/var/lib/cockroach/
+    restart: unless-stopped
+    volumes:
+      - cockroach_data:/var/lib/cockroach
+    ports:
+      - "26257:26257"
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nakama:
+    image: heroiclabs/nakama:3.22.0
+    restart: unless-stopped
+    entrypoint:
+      - "/bin/sh"
+      - "-ecx"
+      - |
+        /nakama/nakama migrate up \
+          --database.address "root@cockroachdb:26257/nakama" && \
+        exec /nakama/nakama \
+          --config /nakama/data/local.yml \
+          --database.address "root@cockroachdb:26257/nakama"
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+    volumes:
+      - ./nakama/local.yml:/nakama/data/local.yml:ro
+      - ./nakama/data/modules/index.js:/nakama/data/modules/index.js:ro
+    ports:
+      - "7349:7349"
+      - "7350:7350"
+      - "7351:7351"
+    environment:
+      - NAKAMA_SERVER_KEY=defaultkey
+      - NAKAMA_CONSOLE_USERNAME=admin
+      - NAKAMA_CONSOLE_PASSWORD=admin1234
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7350/healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cockroach_data:

@@ -1,0 +1,68 @@
+# docker-compose.prod.yml
+# Override file for production deployments.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: "3.9"
+
+services:
+  cockroachdb:
+    # In production, point to a managed CockroachDB Cloud instance instead.
+    # Comment out this service and set DATABASE_URL in nakama's environment.
+    restart: always
+    command: >
+      start-single-node
+      --insecure
+      --store=attrs=ssd,path=/var/lib/cockroach/
+      --cache=.25
+      --max-sql-memory=.25
+
+  nakama:
+    restart: always
+    environment:
+      - NAKAMA_SERVER_KEY=${NAKAMA_SERVER_KEY}
+      - NAKAMA_CONSOLE_PASSWORD=${NAKAMA_CONSOLE_PASSWORD}
+    labels:
+      # Traefik labels — remove if using nginx/ALB instead
+      - "traefik.enable=true"
+      - "traefik.http.routers.nakama.rule=Host(`api.yourdomain.com`)"
+      - "traefik.http.routers.nakama.entrypoints=websecure"
+      - "traefik.http.routers.nakama.tls.certresolver=letsencrypt"
+      - "traefik.http.services.nakama.loadbalancer.server.port=7350"
+
+  frontend:
+    build:
+      context: ./client
+      args:
+        VITE_NAKAMA_HOST: api.yourdomain.com
+        VITE_NAKAMA_PORT: "443"
+        VITE_NAKAMA_SSL: "true"
+        VITE_NAKAMA_KEY: ${NAKAMA_SERVER_KEY}
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`yourdomain.com`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+
+  # Traefik reverse proxy with automatic TLS
+  traefik:
+    image: traefik:v3.1
+    restart: always
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+
+volumes:
+  letsencrypt:
