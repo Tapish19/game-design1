@@ -101,6 +101,50 @@ function parseStatsRecord(raw: unknown): StatsRecord {
   };
 }
 
+function readStatsRecord(nk: nkruntime.Nakama, userId: string): StatsRecord {
+  const queryBase = {
+    collection: "player_stats",
+    key: "record",
+  };
+  let records: any[] = [];
+
+  try {
+    records = nk.storageRead([{ ...queryBase, userId }]);
+  } catch {}
+
+  if (!records || records.length === 0) {
+    try {
+      records = nk.storageRead([{ ...queryBase, user_id: userId }]);
+    } catch {}
+  }
+
+  if (!records || records.length === 0) {
+    return { wins: 0, losses: 0, draws: 0 };
+  }
+  return parseStatsRecord(records[0].value);
+}
+
+function writeStatsRecord(
+  nk: nkruntime.Nakama,
+  userId: string,
+  record: StatsRecord
+) {
+  const writeBase = {
+    collection: "player_stats",
+    key: "record",
+    value: record,
+    permissionRead: 2,
+    permissionWrite: 0,
+  };
+
+  try {
+    nk.storageWrite([{ ...writeBase, userId }]);
+    return;
+  } catch {}
+
+  nk.storageWrite([{ ...writeBase, user_id: userId }]);
+}
+
 function buildGameStatePayload(state: MatchState, presenceUserId?: string) {
   const playerList = (Object.values(state.players) as PlayerInfo[]).map(p => ({
     userId: p.userId,
@@ -170,39 +214,18 @@ function resolveWinner(
     }
 
     try {
-      const winnerExisting = nk.storageRead([{ collection: "player_stats", key: "record", userId: state.winner }]);
-      const winnerRecord = winnerExisting.length > 0
-        ? parseStatsRecord(winnerExisting[0].value)
-        : { wins: 0, losses: 0, draws: 0 };
+      const winnerRecord = readStatsRecord(nk, state.winner);
       winnerRecord.wins += 1;
-      nk.storageWrite([{
-        collection: "player_stats",
-        key: "record",
-        userId: state.winner,
-        value: JSON.stringify(winnerRecord),
-        permissionRead: 2,
-        permissionWrite: 0,
-      }]);
+      writeStatsRecord(nk, state.winner, winnerRecord);
     } catch (e) {
       logger.error("Failed to write winner stats: %v", e);
     }
 
     if (loserId) {
       try {
-        // track losses on a separate leaderboard or via storage
-        const existing = nk.storageRead([{ collection: "player_stats", key: "record", userId: loserId }]);
-        const record = existing.length > 0
-          ? parseStatsRecord(existing[0].value)
-          : { wins: 0, losses: 0, draws: 0 };
+        const record = readStatsRecord(nk, loserId);
         record.losses += 1;
-        nk.storageWrite([{
-          collection: "player_stats",
-          key: "record",
-          userId: loserId,
-          value: JSON.stringify(record),
-          permissionRead: 2,
-          permissionWrite: 0,
-        }]);
+        writeStatsRecord(nk, loserId, record);
       } catch (e) {
         logger.error("Failed to write loser stats: %v", e);
       }
@@ -211,19 +234,9 @@ function resolveWinner(
     // Record draws for both
     for (const userId of state.playerOrder) {
       try {
-        const existing = nk.storageRead([{ collection: "player_stats", key: "record", userId }]);
-        let record = existing.length > 0
-          ? parseStatsRecord(existing[0].value)
-          : { wins: 0, losses: 0, draws: 0 };
+        let record = readStatsRecord(nk, userId);
         record.draws += 1;
-        nk.storageWrite([{
-          collection: "player_stats",
-          key: "record",
-          userId,
-          value: JSON.stringify(record),
-          permissionRead: 2,
-          permissionWrite: 0,
-        }]);
+        writeStatsRecord(nk, userId, record);
       } catch (e) {
         logger.error("Failed to write draw record: %v", e);
       }
