@@ -121,7 +121,11 @@ function finishGame(state, nk, logger, winnerValue) {
   if (winnerValue === "draw") {
     state.winner = "draw";
     for (var i = 0; i < state.playerOrder.length; i += 1) {
-      updateStats(nk, state.playerOrder[i], { draws: 1 });
+      try {
+        updateStats(nk, state.playerOrder[i], { draws: 1 });
+      } catch (drawErr) {
+        logger.error("Failed to persist draw for user %v: %v", state.playerOrder[i], drawErr);
+      }
     }
     return;
   }
@@ -150,10 +154,22 @@ function finishGame(state, nk, logger, winnerValue) {
       0,
       {}
     );
+  } catch (lbErr) {
+    logger.error("Failed to write leaderboard win for user %v: %v", winnerUserId, lbErr);
+  }
+
+  try {
     updateStats(nk, winnerUserId, { wins: 1 });
-    if (loserUserId) updateStats(nk, loserUserId, { losses: 1 });
-  } catch (e) {
-    logger.error("Failed to persist results: %v", e);
+  } catch (winnerStatsErr) {
+    logger.error("Failed to write winner stats for user %v: %v", winnerUserId, winnerStatsErr);
+  }
+
+  if (loserUserId) {
+    try {
+      updateStats(nk, loserUserId, { losses: 1 });
+    } catch (loserStatsErr) {
+      logger.error("Failed to write loser stats for user %v: %v", loserUserId, loserStatsErr);
+    }
   }
 }
 

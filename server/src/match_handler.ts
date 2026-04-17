@@ -155,6 +155,7 @@ function resolveWinner(
   // Persist leaderboard scores
   if (state.winner && state.winner !== "draw") {
     const loserId = state.playerOrder.find(id => id !== state.winner);
+
     try {
       nk.leaderboardRecordWrite(
         "global_wins",
@@ -164,25 +165,13 @@ function resolveWinner(
         0,
         {}
       );
-      if (loserId) {
-        // track losses on a separate leaderboard or via storage
-        const existing = nk.storageRead([{ collection: "player_stats", key: "record", userId: loserId }]);
-        let record = existing.length > 0
-          ? parseStatsRecord(existing[0].value)
-          : { wins: 0, losses: 0, draws: 0 };
-        record.losses += 1;
-        nk.storageWrite([{
-          collection: "player_stats",
-          key: "record",
-          userId: loserId,
-          value: JSON.stringify(record),
-          permissionRead: 2,
-          permissionWrite: 0,
-        }]);
-      }
-      // Winner storage
+    } catch (e) {
+      logger.error("Failed to write leaderboard win record: %v", e);
+    }
+
+    try {
       const winnerExisting = nk.storageRead([{ collection: "player_stats", key: "record", userId: state.winner }]);
-      let winnerRecord = winnerExisting.length > 0
+      const winnerRecord = winnerExisting.length > 0
         ? parseStatsRecord(winnerExisting[0].value)
         : { wins: 0, losses: 0, draws: 0 };
       winnerRecord.wins += 1;
@@ -195,7 +184,28 @@ function resolveWinner(
         permissionWrite: 0,
       }]);
     } catch (e) {
-      logger.error("Failed to write leaderboard: %v", e);
+      logger.error("Failed to write winner stats: %v", e);
+    }
+
+    if (loserId) {
+      try {
+        // track losses on a separate leaderboard or via storage
+        const existing = nk.storageRead([{ collection: "player_stats", key: "record", userId: loserId }]);
+        const record = existing.length > 0
+          ? parseStatsRecord(existing[0].value)
+          : { wins: 0, losses: 0, draws: 0 };
+        record.losses += 1;
+        nk.storageWrite([{
+          collection: "player_stats",
+          key: "record",
+          userId: loserId,
+          value: JSON.stringify(record),
+          permissionRead: 2,
+          permissionWrite: 0,
+        }]);
+      } catch (e) {
+        logger.error("Failed to write loser stats: %v", e);
+      }
     }
   } else if (state.winner === "draw") {
     // Record draws for both
