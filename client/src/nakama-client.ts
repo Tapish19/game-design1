@@ -82,7 +82,11 @@ export async function authenticateDevice(deviceId?: string): Promise<Session> {
 // ---------------- SOCKET CONNECT ----------------
 export async function openSocket(): Promise<Socket> {
   if (!_session) throw new Error("No session — authenticate first");
-  if (_socket) return _socket;
+  if (_socket?.isConnected()) return _socket;
+  if (_socket) {
+    _socket.disconnect();
+    _socket = null;
+  }
 
   // ✅ FIXED (removed invalid args)
 _socket = getClient().createSocket(USE_SSL);
@@ -93,8 +97,11 @@ _socket = getClient().createSocket(USE_SSL);
 
 // ---------------- SOCKET CLOSE ----------------
 export function closeSocket() {
-  // ✅ FIXED (no arguments)
-  _socket?.disconnect();
+  // Avoid triggering user-facing disconnect errors during intentional closes.
+  if (_socket) {
+    _socket.ondisconnect = undefined;
+    _socket.disconnect();
+  }
   _socket = null;
 }
 
@@ -144,14 +151,22 @@ export async function sendMove(
 
 // ---------------- LEADERBOARD ----------------
 export async function getLeaderboard(): Promise<
-  { rank: number; userId: string; username: string; wins: number }[]
+  { rank: number; userId: string; username: string; wins: number; losses: number; draws: number }[]
 > {
   if (!_session) return [];
 
   const res = await callRpc("get_leaderboard", "");
   const data = JSON.parse(res.payload ?? "{}");
 
-  return data.entries ?? [];
+  const entries = Array.isArray(data.entries) ? data.entries : [];
+  return entries.map((entry: any) => ({
+    rank: Number(entry.rank ?? 0),
+    userId: String(entry.userId ?? ""),
+    username: String(entry.username ?? "Unknown"),
+    wins: Number(entry.wins ?? 0),
+    losses: Number(entry.losses ?? 0),
+    draws: Number(entry.draws ?? 0),
+  }));
 }
 
 // ---------------- STATS ----------------
@@ -164,7 +179,19 @@ export async function getMyStats(): Promise<{
     return { wins: 0, losses: 0, draws: 0 };
 
   const res = await callRpc("get_stats", "");
-  return JSON.parse(res.payload ?? "{}");
+  const parsed = JSON.parse(res.payload ?? "{}");
+
+  // Some Nakama runtimes/SDK wrappers may double-encode storage values,
+  // or wrap the payload in a `{ value: ... }` object. Normalize defensively.
+  const value = typeof parsed === "string"
+    ? JSON.parse(parsed)
+    : (parsed?.value ?? parsed);
+
+  return {
+    wins: Number(value?.wins ?? 0),
+    losses: Number(value?.losses ?? 0),
+    draws: Number(value?.draws ?? 0),
+  };
 }
 
 // ---------------- RPC HANDLER ----------------

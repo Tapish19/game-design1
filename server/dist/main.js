@@ -3,6 +3,39 @@
 // Nakama module entry — registers all RPCs and the match handler
 Object.defineProperty(exports, "__esModule", { value: true });
 const match_handler_1 = require("./match_handler");
+function normalizeStatsRecord(raw) {
+    var _a, _b, _c;
+    const empty = { wins: 0, losses: 0, draws: 0 };
+    if (raw == null)
+        return empty;
+    let value = raw;
+    if (typeof value === "string") {
+        try {
+            value = JSON.parse(value);
+        }
+        catch {
+            return empty;
+        }
+    }
+    if (value && typeof value === "object" && "value" in value) {
+        value = value.value;
+    }
+    if (typeof value === "string") {
+        try {
+            value = JSON.parse(value);
+        }
+        catch {
+            return empty;
+        }
+    }
+    if (!value || typeof value !== "object")
+        return empty;
+    return {
+        wins: Number((_a = value.wins) !== null && _a !== void 0 ? _a : 0),
+        losses: Number((_b = value.losses) !== null && _b !== void 0 ? _b : 0),
+        draws: Number((_c = value.draws) !== null && _c !== void 0 ? _c : 0),
+    };
+}
 // ── RPC: Create or find a match ──────────────────────────────────────────────
 const rpcFindMatch = (ctx, logger, nk, payload) => {
     let mode = "classic";
@@ -51,21 +84,56 @@ const rpcGetStats = (ctx, logger, nk, payload) => {
     if (records.length === 0) {
         return JSON.stringify({ wins: 0, losses: 0, draws: 0 });
     }
-    return records[0].value;
+    return JSON.stringify(normalizeStatsRecord(records[0].value));
 };
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
 const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
-    var _a;
-    const records = nk.leaderboardRecordsList("global_wins", [], // owner IDs to include
-    undefined, // cursor
-    20 // limit
-    );
-    const entries = ((_a = records.records) !== null && _a !== void 0 ? _a : []).map(r => ({
-        rank: r.rank,
-        userId: r.ownerId,
-        username: r.username,
-        wins: r.score,
-    }));
+    var _a, _b;
+    let result = null;
+    const nkAny = nk;
+    try {
+        result = nkAny.leaderboardRecordsList("global_wins", [], 20, null, 0);
+    }
+    catch (firstError) {
+        try {
+            result = nkAny.leaderboardRecordsList("global_wins", [], 20, null);
+        }
+        catch (secondError) {
+            logger.error("get_leaderboard failed: %v / %v", firstError, secondError);
+            return JSON.stringify({ entries: [] });
+        }
+    }
+    const records = Array.isArray(result)
+        ? result
+        : ((_a = result === null || result === void 0 ? void 0 : result.records) !== null && _a !== void 0 ? _a : []);
+    const userIds = records
+        .map((r) => { var _a; return (_a = r.ownerId) !== null && _a !== void 0 ? _a : r.owner_id; })
+        .filter((id) => typeof id === "string" && id.length > 0);
+    const statsRecords = userIds.length > 0
+        ? nk.storageRead(userIds.map((userId) => ({
+            collection: "player_stats",
+            key: "record",
+            userId,
+        })))
+        : [];
+    const statsByUserId = new Map();
+    for (const record of statsRecords) {
+        const userId = (_b = record.userId) !== null && _b !== void 0 ? _b : record.user_id;
+        if (typeof userId === "string" && userId.length > 0) {
+            statsByUserId.set(userId, normalizeStatsRecord(record.value));
+        }
+    }
+    const entries = records.map((r) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        return ({
+            rank: r.rank,
+            userId: (_a = r.ownerId) !== null && _a !== void 0 ? _a : r.owner_id,
+            username: (_b = r.username) !== null && _b !== void 0 ? _b : "Unknown",
+            wins: (_c = r.score) !== null && _c !== void 0 ? _c : 0,
+            losses: (_f = (_e = statsByUserId.get((_d = r.ownerId) !== null && _d !== void 0 ? _d : r.owner_id)) === null || _e === void 0 ? void 0 : _e.losses) !== null && _f !== void 0 ? _f : 0,
+            draws: (_j = (_h = statsByUserId.get((_g = r.ownerId) !== null && _g !== void 0 ? _g : r.owner_id)) === null || _h === void 0 ? void 0 : _h.draws) !== null && _j !== void 0 ? _j : 0,
+        });
+    });
     return JSON.stringify({ entries });
 };
 // ── Module init ──────────────────────────────────────────────────────────────
