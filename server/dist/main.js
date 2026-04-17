@@ -42,7 +42,8 @@ function readStatsRecord(nk, userId) {
         records = nk.storageRead([{
                 collection: "player_stats",
                 key: "record",
-                userId,
+                // @ts-ignore runtime variant compatibility
+                user_id: userId,
             }]);
     }
     catch { }
@@ -51,8 +52,7 @@ function readStatsRecord(nk, userId) {
             records = nk.storageRead([{
                     collection: "player_stats",
                     key: "record",
-                    // @ts-ignore runtime variant compatibility
-                    user_id: userId,
+                    userId,
                 }]);
         }
         catch { }

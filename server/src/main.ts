@@ -54,7 +54,8 @@ function readStatsRecord(nk: nkruntime.Nakama, userId: string): StatsRecord {
     records = nk.storageRead([{
       collection: "player_stats",
       key: "record",
-      userId,
+      // @ts-ignore runtime variant compatibility
+      user_id: userId,
     }]);
   } catch {}
 
@@ -63,8 +64,7 @@ function readStatsRecord(nk: nkruntime.Nakama, userId: string): StatsRecord {
       records = nk.storageRead([{
         collection: "player_stats",
         key: "record",
-        // @ts-ignore runtime variant compatibility
-        user_id: userId,
+        userId,
       }]);
     } catch {}
   }
