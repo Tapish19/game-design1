@@ -112,14 +112,6 @@ function readPlayerStatsRecord(nk, userId) {
 }
 
 function writePlayerStatsRecord(nk, userId, record) {
-  var payloadCamel = {
-    collection: "player_stats",
-    key: "record",
-    userId: userId,
-    value: JSON.stringify(record),
-    permissionRead: 2,
-    permissionWrite: 0,
-  };
   var payloadSnake = {
     collection: "player_stats",
     key: "record",
@@ -128,12 +120,20 @@ function writePlayerStatsRecord(nk, userId, record) {
     permission_read: 2,
     permission_write: 0,
   };
+  var payloadCamel = {
+    collection: "player_stats",
+    key: "record",
+    userId: userId,
+    value: JSON.stringify(record),
+    permissionRead: 2,
+    permissionWrite: 0,
+  };
 
   try {
-    nk.storageWrite([payloadCamel]);
-  } catch (_) {
-    // Fallback for runtimes that only accept snake_case fields.
     nk.storageWrite([payloadSnake]);
+  } catch (_) {
+    // Fallback for runtimes that accept camelCase fields.
+    nk.storageWrite([payloadCamel]);
   }
 }
 

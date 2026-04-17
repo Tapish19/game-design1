@@ -93,6 +93,13 @@ function readStatsRecord(nk, userId) {
     return parseStatsRecord(records[0].value);
 }
 function writeStatsRecord(nk, userId, record) {
+    const writeBaseSnake = {
+        collection: "player_stats",
+        key: "record",
+        value: JSON.stringify(record),
+        permission_read: 2,
+        permission_write: 0,
+    };
     const writeBaseCamel = {
         collection: "player_stats",
         key: "record",
@@ -108,11 +115,11 @@ function writeStatsRecord(nk, userId, record) {
         permission_write: 0,
     };
     try {
-        nk.storageWrite([{ ...writeBaseCamel, userId }]);
+        nk.storageWrite([{ ...writeBaseSnake, user_id: userId }]);
         return;
     }
     catch { }
-    nk.storageWrite([{ ...writeBaseSnake, user_id: userId }]);
+    nk.storageWrite([{ ...writeBaseCamel, userId }]);
 }
 function buildGameStatePayload(state, presenceUserId) {
     const playerList = Object.values(state.players).map(p => ({
