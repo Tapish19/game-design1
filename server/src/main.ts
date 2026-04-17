@@ -11,6 +11,43 @@ import {
   matchSignal,
 } from "./match_handler";
 
+interface StatsRecord {
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+function normalizeStatsRecord(raw: unknown): StatsRecord {
+  const empty: StatsRecord = { wins: 0, losses: 0, draws: 0 };
+  if (raw == null) return empty;
+
+  let value: any = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return empty;
+    }
+  }
+  if (value && typeof value === "object" && "value" in value) {
+    value = (value as any).value;
+  }
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return empty;
+    }
+  }
+  if (!value || typeof value !== "object") return empty;
+
+  return {
+    wins: Number((value as any).wins ?? 0),
+    losses: Number((value as any).losses ?? 0),
+    draws: Number((value as any).draws ?? 0),
+  };
+}
+
 // ── RPC: Create or find a match ──────────────────────────────────────────────
 
 const rpcFindMatch: nkruntime.RpcFunction = (
@@ -72,7 +109,7 @@ const rpcGetStats: nkruntime.RpcFunction = (
   if (records.length === 0) {
     return JSON.stringify({ wins: 0, losses: 0, draws: 0 });
   }
-  return records[0].value;
+  return JSON.stringify(normalizeStatsRecord(records[0].value));
 };
 
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
