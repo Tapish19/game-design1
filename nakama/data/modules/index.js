@@ -71,13 +71,6 @@ function normalizeStatsRecord(raw) {
   if (raw === null || raw === undefined) return empty;
 
   var value = raw;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch (_) {
-      return empty;
-    }
-  }
   if (value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "value")) {
     value = value.value;
   }
@@ -102,25 +95,12 @@ function readPlayerStatsRecord(nk, userId) {
   try {
     reads = nk.storageRead([{ collection: "player_stats", key: "record", userId: userId }]);
   } catch (_) {}
-  if (!reads || reads.length === 0) {
-    try {
-      reads = nk.storageRead([{ collection: "player_stats", key: "record", user_id: userId }]);
-    } catch (_) {}
-  }
   if (!reads || reads.length === 0) return { wins: 0, losses: 0, draws: 0 };
   return normalizeStatsRecord(reads[0].value);
 }
 
 function writePlayerStatsRecord(nk, userId, record) {
-  var payloadSnake = {
-    collection: "player_stats",
-    key: "record",
-    user_id: userId,
-    value: JSON.stringify(record),
-    permission_read: 2,
-    permission_write: 0,
-  };
-  var payloadCamel = {
+  var payload = {
     collection: "player_stats",
     key: "record",
     userId: userId,
@@ -128,13 +108,7 @@ function writePlayerStatsRecord(nk, userId, record) {
     permissionRead: 2,
     permissionWrite: 0,
   };
-
-  try {
-    nk.storageWrite([payloadSnake]);
-  } catch (_) {
-    // Fallback for runtimes that accept camelCase fields.
-    nk.storageWrite([payloadCamel]);
-  }
+  nk.storageWrite([payload]);
 }
 
 function updateStats(nk, userId, change) {
