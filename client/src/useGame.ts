@@ -44,6 +44,7 @@ export function useGame(): UseGameReturn {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const matchIdRef = useRef<string | null>(null);
+  const gameStatusRef = useRef<GameState["status"]>("waiting");
 
   const myUserId = getSession()?.user_id ?? null;
 
@@ -64,11 +65,13 @@ export function useGame(): UseGameReturn {
       switch (opCode) {
         case OpCode.GAME_STATE:
           setGameState(payload as GameState);
+          gameStatusRef.current = (payload as GameState).status ?? "waiting";
           setTimeLeft(payload.timeLeft ?? null);
           break;
         case OpCode.GAME_OVER:
           setGameState(payload as GameState);
           setGameOver(payload as GameOverPayload);
+          gameStatusRef.current = "finished";
           break;
         case OpCode.TIMER_TICK:
           setTimeLeft(payload.timeLeft);
@@ -87,7 +90,10 @@ export function useGame(): UseGameReturn {
 
     socket.ondisconnect = () => {
       closeSocket();
-      setError("Disconnected from server. Please refresh.");
+      const shouldWarn = gameStatusRef.current === "playing" || gameStatusRef.current === "waiting";
+      if (shouldWarn) {
+        setError("Disconnected from server. Please refresh.");
+      }
     };
   }, []);
 
@@ -96,6 +102,7 @@ export function useGame(): UseGameReturn {
     setGameState(null);
     setGameOver(null);
     setTimeLeft(null);
+    gameStatusRef.current = "waiting";
 
     try {
       await openSocket();
@@ -135,6 +142,7 @@ export function useGame(): UseGameReturn {
     setError(null);
     setOpponentStatus("connected");
     setTimeLeft(null);
+    gameStatusRef.current = "waiting";
   }, []);
 
   const setClientError = useCallback((message: string | null) => {
