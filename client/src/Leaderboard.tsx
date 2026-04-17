@@ -25,14 +25,37 @@ export function Leaderboard({ onBack, myUserId }: LeaderboardProps) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [myStats, setMyStats] = useState<MyStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getLeaderboard(), getMyStats()])
-      .then(([lb, stats]) => {
+    let mounted = true;
+
+    const load = async (initial = false) => {
+      if (initial) setLoading(true);
+
+      try {
+        const [lb, stats] = await Promise.all([getLeaderboard(), getMyStats()]);
+        if (!mounted) return;
         setEntries(lb);
         setMyStats(stats);
-      })
-      .finally(() => setLoading(false));
+        setError(null);
+      } catch (e: any) {
+        if (!mounted) return;
+        setError(e?.message ?? "Failed to load leaderboard.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    void load(true);
+    const intervalId = window.setInterval(() => {
+      void load(false);
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   const stagger = {
@@ -80,6 +103,8 @@ export function Leaderboard({ onBack, myUserId }: LeaderboardProps) {
 
       {loading ? (
         <div className="lb-loading">Loading…</div>
+      ) : error ? (
+        <div className="lb-empty">{error}</div>
       ) : entries.length === 0 ? (
         <p className="lb-empty">No records yet. Play a game to get ranked!</p>
       ) : (
