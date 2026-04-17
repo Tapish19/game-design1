@@ -44,9 +44,14 @@ export function Leaderboard({ onBack, myUserId }: LeaderboardProps) {
           stats.losses === 0 &&
           stats.draws === 0 &&
           myEntry &&
-          myEntry.wins > 0
+          (myEntry.wins > 0 || myEntry.losses > 0 || myEntry.draws > 0)
         )
-          ? { ...stats, wins: myEntry.wins }
+          ? {
+            ...stats,
+            wins: myEntry.wins,
+            losses: myEntry.losses,
+            draws: myEntry.draws,
+          }
           : stats;
         setEntries(lb);
         setMyStats(normalizedStats);
