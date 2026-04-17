@@ -5,4 +5,4 @@ COPY ./local.yml /nakama/data/local.yml
 
 ENTRYPOINT ["/bin/sh", "-ec"]
 
-CMD ["/nakama/nakama migrate up --database.address postgresql://tapish199_gmail_com:YxNL-J-eoOBh_l9ax7KvvA@ochre-mollusk-14773.jxf.gcp-asia-south1.cockroachlabs.cloud:26257/nakama?sslmode=require && exec /nakama/nakama --config /nakama/data/local.yml --database.address postgresql://tapish199_gmail_com:YxNL-J-eoOBh_l9ax7KvvA@ochre-mollusk-14773.jxf.gcp-asia-south1.cockroachlabs.cloud:26257/nakama?sslmode=require"]
+CMD ["/nakama/nakama migrate up --database.address \"$DATABASE_ADDRESS\" && exec /nakama/nakama --config /nakama/data/local.yml --database.address \"$DATABASE_ADDRESS\""]
