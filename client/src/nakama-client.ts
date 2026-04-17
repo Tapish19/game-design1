@@ -97,8 +97,11 @@ _socket = getClient().createSocket(USE_SSL);
 
 // ---------------- SOCKET CLOSE ----------------
 export function closeSocket() {
-  // ✅ FIXED (no arguments)
-  _socket?.disconnect();
+  // Avoid triggering user-facing disconnect errors during intentional closes.
+  if (_socket) {
+    _socket.ondisconnect = undefined;
+    _socket.disconnect();
+  }
   _socket = null;
 }
 

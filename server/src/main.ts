@@ -148,7 +148,10 @@ const rpcGetLeaderboard: nkruntime.RpcFunction = (
 
   const statsByUserId = new Map<string, StatsRecord>();
   for (const record of statsRecords) {
-    statsByUserId.set(record.userId, normalizeStatsRecord(record.value));
+    const userId = (record as any).userId ?? (record as any).user_id;
+    if (typeof userId === "string" && userId.length > 0) {
+      statsByUserId.set(userId, normalizeStatsRecord(record.value));
+    }
   }
 
   const entries = records.map((r: any) => ({

@@ -88,7 +88,7 @@ const rpcGetStats = (ctx, logger, nk, payload) => {
 };
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
 const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
-    var _a;
+    var _a, _b;
     let result = null;
     const nkAny = nk;
     try {
@@ -118,7 +118,10 @@ const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
         : [];
     const statsByUserId = new Map();
     for (const record of statsRecords) {
-        statsByUserId.set(record.userId, normalizeStatsRecord(record.value));
+        const userId = (_b = record.userId) !== null && _b !== void 0 ? _b : record.user_id;
+        if (typeof userId === "string" && userId.length > 0) {
+            statsByUserId.set(userId, normalizeStatsRecord(record.value));
+        }
     }
     const entries = records.map((r) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j;
