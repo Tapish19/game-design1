@@ -150,7 +150,7 @@ const rpcGetStats: nkruntime.RpcFunction = (
   ctx, logger, nk, payload
 ) => {
   if (!ctx.userId) throw new Error("Not authenticated");
-  return JSON.stringify(readStatsRecord(nk, ctx.userId, logger, "rpc_get_stats"));
+  return JSON.stringify(readStatsRecord(nk, ctx.userId));
 };
 
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────

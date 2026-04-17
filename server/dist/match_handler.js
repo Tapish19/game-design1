@@ -71,78 +71,41 @@ function parseStatsRecord(raw) {
         draws: Number((_c = value.draws) !== null && _c !== void 0 ? _c : 0),
     };
 }
-function summarizeRecords(records) {
-    const summary = (records !== null && records !== void 0 ? records : []).slice(0, 2).map((record) => {
-        var _a, _b, _c, _d, _e, _f, _g;
-        return ({
-            userId: (_d = (_b = (_a = record === null || record === void 0 ? void 0 : record.userId) !== null && _a !== void 0 ? _a : record === null || record === void 0 ? void 0 : record.user_id) !== null && _b !== void 0 ? _b : (_c = record === null || record === void 0 ? void 0 : record.user) === null || _c === void 0 ? void 0 : _c.id) !== null && _d !== void 0 ? _d : null,
-            key: (_e = record === null || record === void 0 ? void 0 : record.key) !== null && _e !== void 0 ? _e : null,
-            collection: (_f = record === null || record === void 0 ? void 0 : record.collection) !== null && _f !== void 0 ? _f : null,
-            value: (_g = record === null || record === void 0 ? void 0 : record.value) !== null && _g !== void 0 ? _g : null,
-        });
-    });
-    return JSON.stringify(summary);
-}
-function readStatsRecord(nk, userId, logger, source = "unknown") {
+function readStatsRecord(nk, userId) {
     const queryBase = {
         collection: "player_stats",
         key: "record",
     };
     let records = [];
     try {
-        logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] trying user_id for %v", source, userId);
-        records = nk.storageRead([{ ...queryBase, user_id: userId }]);
-        logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] user_id returned %v records: %v", source, records.length, summarizeRecords(records));
+        records = nk.storageRead([{ ...queryBase, userId }]);
     }
-    catch (e) {
-        logger === null || logger === void 0 ? void 0 : logger.error("[stats-read:%v] user_id read failed for %v: %v", source, userId, e);
-    }
+    catch { }
     if (!records || records.length === 0) {
         try {
-            logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] trying userId for %v", source, userId);
-            records = nk.storageRead([{ ...queryBase, userId }]);
-            logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] userId returned %v records: %v", source, records.length, summarizeRecords(records));
+            records = nk.storageRead([{ ...queryBase, user_id: userId }]);
         }
-        catch (e) {
-            logger === null || logger === void 0 ? void 0 : logger.error("[stats-read:%v] userId read failed for %v: %v", source, userId, e);
-        }
+        catch { }
     }
     if (!records || records.length === 0) {
-        logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] no stats found for %v; defaulting to 0/0/0", source, userId);
         return { wins: 0, losses: 0, draws: 0 };
     }
     return parseStatsRecord(records[0].value);
 }
-function writeStatsRecord(nk, userId, record, logger, source = "unknown") {
+function writeStatsRecord(nk, userId, record) {
     const writeBase = {
         collection: "player_stats",
         key: "record",
-        value: record,
+        value: JSON.stringify(record),
         permissionRead: 2,
         permissionWrite: 0,
     };
-    let wrote = false;
     try {
-        logger === null || logger === void 0 ? void 0 : logger.info("[stats-write:%v] trying userId for %v value=%v", source, userId, JSON.stringify(record));
         nk.storageWrite([{ ...writeBase, userId }]);
-        wrote = true;
-        logger === null || logger === void 0 ? void 0 : logger.info("[stats-write:%v] userId write succeeded for %v", source, userId);
+        return;
     }
-    catch (e) {
-        logger === null || logger === void 0 ? void 0 : logger.error("[stats-write:%v] userId write failed for %v: %v", source, userId, e);
-    }
-    try {
-        logger === null || logger === void 0 ? void 0 : logger.info("[stats-write:%v] trying user_id for %v value=%v", source, userId, JSON.stringify(record));
-        nk.storageWrite([{ ...writeBase, user_id: userId }]);
-        wrote = true;
-        logger === null || logger === void 0 ? void 0 : logger.info("[stats-write:%v] user_id write succeeded for %v", source, userId);
-    }
-    catch (e) {
-        logger === null || logger === void 0 ? void 0 : logger.error("[stats-write:%v] user_id write failed for %v: %v", source, userId, e);
-    }
-    if (!wrote) {
-        throw new Error("Failed to persist stats record");
-    }
+    catch { }
+    nk.storageWrite([{ ...writeBase, user_id: userId }]);
 }
 function buildGameStatePayload(state, presenceUserId) {
     const playerList = Object.values(state.players).map(p => ({
@@ -186,18 +149,18 @@ function resolveWinner(state, winMark, nk, logger) {
             logger.error("Failed to write leaderboard win record: %v", e);
         }
         try {
-            const winnerRecord = readStatsRecord(nk, state.winner, logger, "winner_before_increment");
+            const winnerRecord = readStatsRecord(nk, state.winner);
             winnerRecord.wins += 1;
-            writeStatsRecord(nk, state.winner, winnerRecord, logger, "winner_after_increment");
+            writeStatsRecord(nk, state.winner, winnerRecord);
         }
         catch (e) {
             logger.error("Failed to write winner stats: %v", e);
         }
         if (loserId) {
             try {
-                const record = readStatsRecord(nk, loserId, logger, "loser_before_increment");
+                const record = readStatsRecord(nk, loserId);
                 record.losses += 1;
-                writeStatsRecord(nk, loserId, record, logger, "loser_after_increment");
+                writeStatsRecord(nk, loserId, record);
             }
             catch (e) {
                 logger.error("Failed to write loser stats: %v", e);
@@ -208,9 +171,9 @@ function resolveWinner(state, winMark, nk, logger) {
         // Record draws for both
         for (const userId of state.playerOrder) {
             try {
-                let record = readStatsRecord(nk, userId, logger, "draw_before_increment");
+                let record = readStatsRecord(nk, userId);
                 record.draws += 1;
-                writeStatsRecord(nk, userId, record, logger, "draw_after_increment");
+                writeStatsRecord(nk, userId, record);
             }
             catch (e) {
                 logger.error("Failed to write draw record: %v", e);

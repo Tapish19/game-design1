@@ -123,7 +123,7 @@ const rpcCreateRoom = (ctx, logger, nk, payload) => {
 const rpcGetStats = (ctx, logger, nk, payload) => {
     if (!ctx.userId)
         throw new Error("Not authenticated");
-    return JSON.stringify(readStatsRecord(nk, ctx.userId, logger, "rpc_get_stats"));
+    return JSON.stringify(readStatsRecord(nk, ctx.userId));
 };
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
 const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
