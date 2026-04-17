@@ -129,9 +129,22 @@ export function useGame(): UseGameReturn {
     try {
       await sendMove(matchIdRef.current, position);
     } catch (e: any) {
-      setError(e?.message ?? "Move failed");
+      const message = String(e?.message ?? "");
+      if (message.includes("Socket not open")) {
+        try {
+          await openSocket();
+          wireSocketEvents();
+          await joinMatchById(matchIdRef.current);
+          await sendMove(matchIdRef.current, position);
+          return;
+        } catch (retryError: any) {
+          setError(retryError?.message ?? "Move failed");
+          return;
+        }
+      }
+      setError(message || "Move failed");
     }
-  }, []);
+  }, [wireSocketEvents]);
 
   const leaveMatch = useCallback(() => {
     closeSocket();

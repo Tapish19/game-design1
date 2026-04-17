@@ -66,14 +66,42 @@ function sendToOne(dispatcher, presence, opcode, payload) {
   dispatcher.broadcastMessage(opcode, JSON.stringify(payload), [presence], null, true);
 }
 
+function normalizeStatsRecord(raw) {
+  var empty = { wins: 0, losses: 0, draws: 0 };
+  if (raw === null || raw === undefined) return empty;
+
+  var value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch (_) {
+      return empty;
+    }
+  }
+  if (value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "value")) {
+    value = value.value;
+  }
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch (_) {
+      return empty;
+    }
+  }
+  if (!value || typeof value !== "object") return empty;
+
+  return {
+    wins: Number(value.wins || 0),
+    losses: Number(value.losses || 0),
+    draws: Number(value.draws || 0),
+  };
+}
+
 function updateStats(nk, userId, change) {
   var existing = nk.storageRead([{ collection: "player_stats", key: "record", userId: userId }]);
-  var record = { wins: 0, losses: 0, draws: 0 };
-  if (existing.length > 0) {
-    try {
-      record = JSON.parse(existing[0].value);
-    } catch (_) {}
-  }
+  var record = existing.length > 0
+    ? normalizeStatsRecord(existing[0].value)
+    : { wins: 0, losses: 0, draws: 0 };
   record.wins += change.wins || 0;
   record.losses += change.losses || 0;
   record.draws += change.draws || 0;
@@ -344,7 +372,7 @@ function rpcGetStats(ctx, logger, nk, payload) {
   if (!userId) throw new Error("Not authenticated");
   var records = nk.storageRead([{ collection: "player_stats", key: "record", userId: userId }]);
   if (records.length === 0) return JSON.stringify({ wins: 0, losses: 0, draws: 0 });
-  return records[0].value;
+  return JSON.stringify(normalizeStatsRecord(records[0].value));
 }
 
 function rpcGetLeaderboard(ctx, logger, nk, payload) {
@@ -367,12 +395,35 @@ function rpcGetLeaderboard(ctx, logger, nk, payload) {
     records = result;
   }
 
+  var userIds = records
+    .map(function (r) { return r.ownerId || r.owner_id; })
+    .filter(function (id) { return typeof id === "string" && id.length > 0; });
+
+  var statsRecords = userIds.length > 0
+    ? nk.storageRead(userIds.map(function (userId) {
+      return { collection: "player_stats", key: "record", userId: userId };
+    }))
+    : [];
+
+  var statsByUserId = {};
+  for (var i = 0; i < statsRecords.length; i += 1) {
+    var statsRecord = statsRecords[i];
+    var ownerId = statsRecord.userId || statsRecord.user_id;
+    if (typeof ownerId === "string" && ownerId.length > 0) {
+      statsByUserId[ownerId] = normalizeStatsRecord(statsRecord.value);
+    }
+  }
+
   var entries = records.map(function (r) {
+    var userId = r.ownerId || r.owner_id;
+    var stats = statsByUserId[userId] || { wins: 0, losses: 0, draws: 0 };
     return {
       rank: r.rank,
-      userId: r.ownerId || r.owner_id,
+      userId: userId,
       username: r.username || "Unknown",
       wins: r.score || 0,
+      losses: stats.losses,
+      draws: stats.draws,
     };
   });
   return JSON.stringify({ entries: entries });
