@@ -465,7 +465,7 @@ function rpcGetLeaderboard(ctx, logger, nk, payload) {
       rank: r.rank,
       userId: userId,
       username: r.username || "Unknown",
-      wins: statsValidByUserId[userId] ? statsWins : leaderboardWins,
+      wins: statsWins,
       losses: stats.losses,
       draws: stats.draws,
     };
