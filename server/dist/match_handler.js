@@ -72,54 +72,26 @@ function parseStatsRecord(raw) {
     };
 }
 function readStatsRecord(nk, userId) {
-    const queryBase = {
-        collection: "player_stats",
-        key: "record",
-    };
     let records = [];
     try {
-        records = nk.storageRead([{ ...queryBase, userId }]);
+        records = nk.storageRead([{ collection: "player_stats", key: "record", userId }]);
     }
     catch { }
-    if (!records || records.length === 0) {
-        try {
-            records = nk.storageRead([{ ...queryBase, user_id: userId }]);
-        }
-        catch { }
-    }
     if (!records || records.length === 0) {
         return { wins: 0, losses: 0, draws: 0 };
     }
     return parseStatsRecord(records[0].value);
 }
 function writeStatsRecord(nk, userId, record) {
-    const writeBaseSnake = {
-        collection: "player_stats",
-        key: "record",
-        value: JSON.stringify(record),
-        permission_read: 2,
-        permission_write: 0,
-    };
-    const writeBaseCamel = {
+    const payload = {
         collection: "player_stats",
         key: "record",
         value: JSON.stringify(record),
         permissionRead: 2,
         permissionWrite: 0,
+        userId,
     };
-    const writeBaseSnake = {
-        collection: "player_stats",
-        key: "record",
-        value: JSON.stringify(record),
-        permission_read: 2,
-        permission_write: 0,
-    };
-    try {
-        nk.storageWrite([{ ...writeBaseSnake, user_id: userId }]);
-        return;
-    }
-    catch { }
-    nk.storageWrite([{ ...writeBaseCamel, userId }]);
+    nk.storageWrite([payload]);
 }
 function buildGameStatePayload(state, presenceUserId) {
     const playerList = Object.values(state.players).map(p => ({
