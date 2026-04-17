@@ -164,7 +164,19 @@ export async function getMyStats(): Promise<{
     return { wins: 0, losses: 0, draws: 0 };
 
   const res = await callRpc("get_stats", "");
-  return JSON.parse(res.payload ?? "{}");
+  const parsed = JSON.parse(res.payload ?? "{}");
+
+  // Some Nakama runtimes/SDK wrappers may double-encode storage values,
+  // or wrap the payload in a `{ value: ... }` object. Normalize defensively.
+  const value = typeof parsed === "string"
+    ? JSON.parse(parsed)
+    : (parsed?.value ?? parsed);
+
+  return {
+    wins: Number(value?.wins ?? 0),
+    losses: Number(value?.losses ?? 0),
+    draws: Number(value?.draws ?? 0),
+  };
 }
 
 // ---------------- RPC HANDLER ----------------
