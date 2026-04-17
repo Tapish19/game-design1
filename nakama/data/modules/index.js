@@ -348,9 +348,32 @@ function rpcGetStats(ctx, logger, nk, payload) {
 }
 
 function rpcGetLeaderboard(ctx, logger, nk, payload) {
-  var records = nk.leaderboardRecordsList("global_wins", [], 20, undefined);
-  var entries = (records.records || []).map(function (r) {
-    return { rank: r.rank, userId: r.ownerId, username: r.username, wins: r.score };
+  var result = null;
+  try {
+    result = nk.leaderboardRecordsList("global_wins", [], 20, null, 0);
+  } catch (firstError) {
+    try {
+      result = nk.leaderboardRecordsList("global_wins", [], 20, null);
+    } catch (secondError) {
+      logger.error("get_leaderboard failed: %v / %v", firstError, secondError);
+      return JSON.stringify({ entries: [] });
+    }
+  }
+
+  var records = [];
+  if (result && result.records) {
+    records = result.records;
+  } else if (Array.isArray(result)) {
+    records = result;
+  }
+
+  var entries = records.map(function (r) {
+    return {
+      rank: r.rank,
+      userId: r.ownerId || r.owner_id,
+      username: r.username || "Unknown",
+      wins: r.score || 0,
+    };
   });
   return JSON.stringify({ entries: entries });
 }

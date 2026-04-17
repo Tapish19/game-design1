@@ -80,18 +80,29 @@ const rpcGetStats: nkruntime.RpcFunction = (
 const rpcGetLeaderboard: nkruntime.RpcFunction = (
   ctx, logger, nk, payload
 ) => {
-  const records = nk.leaderboardRecordsList(
-    "global_wins",
-    [],          // owner IDs to include
-    20,          // limit
-    undefined,   // cursor
-  );
+  let result: any = null;
+  const nkAny = nk as any;
 
-  const entries = (records.records ?? []).map(r => ({
+  try {
+    result = nkAny.leaderboardRecordsList("global_wins", [], 20, null, 0);
+  } catch (firstError) {
+    try {
+      result = nkAny.leaderboardRecordsList("global_wins", [], 20, null);
+    } catch (secondError) {
+      logger.error("get_leaderboard failed: %v / %v", firstError, secondError);
+      return JSON.stringify({ entries: [] });
+    }
+  }
+
+  const records = Array.isArray(result)
+    ? result
+    : (result?.records ?? []);
+
+  const entries = records.map((r: any) => ({
     rank: r.rank,
-    userId: r.ownerId,
-    username: r.username,
-    wins: r.score,
+    userId: r.ownerId ?? r.owner_id,
+    username: r.username ?? "Unknown",
+    wins: r.score ?? 0,
   }));
 
   return JSON.stringify({ entries });
