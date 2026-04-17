@@ -135,11 +135,29 @@ const rpcGetLeaderboard: nkruntime.RpcFunction = (
     ? result
     : (result?.records ?? []);
 
+  const userIds = records
+    .map((r: any) => r.ownerId ?? r.owner_id)
+    .filter((id: unknown): id is string => typeof id === "string" && id.length > 0);
+  const statsRecords = userIds.length > 0
+    ? nk.storageRead(userIds.map((userId) => ({
+      collection: "player_stats",
+      key: "record",
+      userId,
+    })))
+    : [];
+
+  const statsByUserId = new Map<string, StatsRecord>();
+  for (const record of statsRecords) {
+    statsByUserId.set(record.userId, normalizeStatsRecord(record.value));
+  }
+
   const entries = records.map((r: any) => ({
     rank: r.rank,
     userId: r.ownerId ?? r.owner_id,
     username: r.username ?? "Unknown",
     wins: r.score ?? 0,
+    losses: statsByUserId.get(r.ownerId ?? r.owner_id)?.losses ?? 0,
+    draws: statsByUserId.get(r.ownerId ?? r.owner_id)?.draws ?? 0,
   }));
 
   return JSON.stringify({ entries });

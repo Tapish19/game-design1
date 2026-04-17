@@ -13,6 +13,8 @@ interface Entry {
   userId: string;
   username: string;
   wins: number;
+  losses: number;
+  draws: number;
 }
 
 interface MyStats {
@@ -134,7 +136,7 @@ export function Leaderboard({ onBack, myUserId }: LeaderboardProps) {
                 {entry.rank <= 3 ? medals[entry.rank - 1] : `#${entry.rank}`}
               </span>
               <span className="lb-username">{entry.username}</span>
-              <span className="lb-wins">{entry.wins} W</span>
+              <span className="lb-wins">{entry.wins}W · {entry.losses}L · {entry.draws}D</span>
             </motion.li>
           ))}
         </motion.ul>

@@ -86,6 +86,7 @@ export function useGame(): UseGameReturn {
     };
 
     socket.ondisconnect = () => {
+      closeSocket();
       setError("Disconnected from server. Please refresh.");
     };
   }, []);

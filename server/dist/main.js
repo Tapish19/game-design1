@@ -106,13 +106,29 @@ const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
     const records = Array.isArray(result)
         ? result
         : ((_a = result === null || result === void 0 ? void 0 : result.records) !== null && _a !== void 0 ? _a : []);
+    const userIds = records
+        .map((r) => { var _a; return (_a = r.ownerId) !== null && _a !== void 0 ? _a : r.owner_id; })
+        .filter((id) => typeof id === "string" && id.length > 0);
+    const statsRecords = userIds.length > 0
+        ? nk.storageRead(userIds.map((userId) => ({
+            collection: "player_stats",
+            key: "record",
+            userId,
+        })))
+        : [];
+    const statsByUserId = new Map();
+    for (const record of statsRecords) {
+        statsByUserId.set(record.userId, normalizeStatsRecord(record.value));
+    }
     const entries = records.map((r) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         return ({
             rank: r.rank,
             userId: (_a = r.ownerId) !== null && _a !== void 0 ? _a : r.owner_id,
             username: (_b = r.username) !== null && _b !== void 0 ? _b : "Unknown",
             wins: (_c = r.score) !== null && _c !== void 0 ? _c : 0,
+            losses: (_f = (_e = statsByUserId.get((_d = r.ownerId) !== null && _d !== void 0 ? _d : r.owner_id)) === null || _e === void 0 ? void 0 : _e.losses) !== null && _f !== void 0 ? _f : 0,
+            draws: (_j = (_h = statsByUserId.get((_g = r.ownerId) !== null && _g !== void 0 ? _g : r.owner_id)) === null || _h === void 0 ? void 0 : _h.draws) !== null && _j !== void 0 ? _j : 0,
         });
     });
     return JSON.stringify({ entries });

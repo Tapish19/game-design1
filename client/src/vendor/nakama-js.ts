@@ -149,6 +149,10 @@ export class Socket {
     this.ws = null;
   }
 
+  isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
 
   private send(payload: object) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) throw new Error("Socket not connected");
