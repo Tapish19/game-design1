@@ -143,6 +143,13 @@ function writeStatsRecord(
     permissionRead: 2,
     permissionWrite: 0,
   };
+  const writeBaseSnake = {
+    collection: "player_stats",
+    key: "record",
+    value: JSON.stringify(record),
+    permission_read: 2,
+    permission_write: 0,
+  };
 
   try {
     nk.storageWrite([{ ...writeBaseSnake, user_id: userId } as any]);
