@@ -426,11 +426,21 @@ function rpcGetLeaderboard(ctx, logger, nk, payload) {
   var entries = records.map(function (r) {
     var userId = r.ownerId || r.owner_id;
     var stats = statsByUserId[userId] || { wins: 0, losses: 0, draws: 0 };
+    var leaderboardWins = Number(r.score || 0);
+    var statsWins = Number(stats.wins || 0);
+    if (leaderboardWins !== statsWins) {
+      logger.warn(
+        "Leaderboard/stat mismatch for user %v (leaderboard=%v, stats=%v)",
+        userId,
+        leaderboardWins,
+        statsWins
+      );
+    }
     return {
       rank: r.rank,
       userId: userId,
       username: r.username || "Unknown",
-      wins: r.score || 0,
+      wins: statsWins,
       losses: stats.losses,
       draws: stats.draws,
     };
