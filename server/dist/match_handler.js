@@ -78,12 +78,12 @@ function readStatsRecord(nk, userId) {
     };
     let records = [];
     try {
-        records = nk.storageRead([{ ...queryBase, user_id: userId }]);
+        records = nk.storageRead([{ ...queryBase, userId }]);
     }
     catch { }
     if (!records || records.length === 0) {
         try {
-            records = nk.storageRead([{ ...queryBase, userId }]);
+            records = nk.storageRead([{ ...queryBase, user_id: userId }]);
         }
         catch { }
     }
@@ -96,24 +96,16 @@ function writeStatsRecord(nk, userId, record) {
     const writeBase = {
         collection: "player_stats",
         key: "record",
-        value: record,
+        value: JSON.stringify(record),
         permissionRead: 2,
         permissionWrite: 0,
     };
-    let wrote = false;
     try {
         nk.storageWrite([{ ...writeBase, userId }]);
-        wrote = true;
+        return;
     }
     catch { }
-    try {
-        nk.storageWrite([{ ...writeBase, user_id: userId }]);
-        wrote = true;
-    }
-    catch { }
-    if (!wrote) {
-        throw new Error("Failed to persist stats record");
-    }
+    nk.storageWrite([{ ...writeBase, user_id: userId }]);
 }
 function buildGameStatePayload(state, presenceUserId) {
     const playerList = Object.values(state.players).map(p => ({
