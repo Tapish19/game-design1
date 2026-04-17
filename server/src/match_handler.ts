@@ -132,7 +132,7 @@ function writeStatsRecord(
   const writeBase = {
     collection: "player_stats",
     key: "record",
-    value: record,
+    value: JSON.stringify(record),
     permissionRead: 2,
     permissionWrite: 0,
   };
