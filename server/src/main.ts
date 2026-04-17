@@ -83,8 +83,8 @@ const rpcGetLeaderboard: nkruntime.RpcFunction = (
   const records = nk.leaderboardRecordsList(
     "global_wins",
     [],          // owner IDs to include
+    20,          // limit
     undefined,   // cursor
-    20           // limit
   );
 
   const entries = (records.records ?? []).map(r => ({

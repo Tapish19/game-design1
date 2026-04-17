@@ -348,7 +348,7 @@ function rpcGetStats(ctx, logger, nk, payload) {
 }
 
 function rpcGetLeaderboard(ctx, logger, nk, payload) {
-  var records = nk.leaderboardRecordsList("global_wins", [], undefined, 20);
+  var records = nk.leaderboardRecordsList("global_wins", [], 20, undefined);
   var entries = (records.records || []).map(function (r) {
     return { rank: r.rank, userId: r.ownerId, username: r.username, wins: r.score };
   });
