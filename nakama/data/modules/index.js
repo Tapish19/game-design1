@@ -132,6 +132,7 @@ function writePlayerStatsRecord(nk, userId, record) {
   try {
     nk.storageWrite([payloadCamel]);
   } catch (_) {
+    // Fallback for runtimes that only accept snake_case fields.
     nk.storageWrite([payloadSnake]);
   }
 }

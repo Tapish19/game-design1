@@ -39,18 +39,11 @@ export function Leaderboard({ onBack, myUserId }: LeaderboardProps) {
         const [lb, stats] = await Promise.all([getLeaderboard(), getMyStats()]);
         if (!mounted) return;
         const myEntry = lb.find((entry) => entry.userId === myUserId);
-        const normalizedStats = (
-          stats.wins === 0 &&
-          stats.losses === 0 &&
-          stats.draws === 0 &&
-          myEntry &&
-          (myEntry.wins > 0 || myEntry.losses > 0 || myEntry.draws > 0)
-        )
+        const normalizedStats = myEntry
           ? {
-            ...stats,
-            wins: myEntry.wins,
-            losses: myEntry.losses,
-            draws: myEntry.draws,
+            wins: Math.max(stats.wins, myEntry.wins),
+            losses: Math.max(stats.losses, myEntry.losses),
+            draws: Math.max(stats.draws, myEntry.draws),
           }
           : stats;
         setEntries(lb);

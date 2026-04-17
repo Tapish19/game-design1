@@ -129,20 +129,27 @@ function writeStatsRecord(
   userId: string,
   record: StatsRecord
 ) {
-  const writeBase = {
+  const writeBaseCamel = {
     collection: "player_stats",
     key: "record",
     value: JSON.stringify(record),
     permissionRead: 2,
     permissionWrite: 0,
   };
+  const writeBaseSnake = {
+    collection: "player_stats",
+    key: "record",
+    value: JSON.stringify(record),
+    permission_read: 2,
+    permission_write: 0,
+  };
 
   try {
-    nk.storageWrite([{ ...writeBase, userId }]);
+    nk.storageWrite([{ ...writeBaseCamel, userId }]);
     return;
   } catch {}
 
-  nk.storageWrite([{ ...writeBase, user_id: userId }]);
+  nk.storageWrite([{ ...writeBaseSnake, user_id: userId } as any]);
 }
 
 function buildGameStatePayload(state: MatchState, presenceUserId?: string) {
@@ -215,6 +222,9 @@ function resolveWinner(
 
     try {
       const winnerRecord = readStatsRecord(nk, state.winner);
+      winnerRecord.wins = Number(winnerRecord.wins ?? 0);
+      winnerRecord.losses = Number(winnerRecord.losses ?? 0);
+      winnerRecord.draws = Number(winnerRecord.draws ?? 0);
       winnerRecord.wins += 1;
       writeStatsRecord(nk, state.winner, winnerRecord);
     } catch (e) {
@@ -224,6 +234,9 @@ function resolveWinner(
     if (loserId) {
       try {
         const record = readStatsRecord(nk, loserId);
+        record.wins = Number(record.wins ?? 0);
+        record.losses = Number(record.losses ?? 0);
+        record.draws = Number(record.draws ?? 0);
         record.losses += 1;
         writeStatsRecord(nk, loserId, record);
       } catch (e) {
@@ -235,6 +248,9 @@ function resolveWinner(
     for (const userId of state.playerOrder) {
       try {
         let record = readStatsRecord(nk, userId);
+        record.wins = Number(record.wins ?? 0);
+        record.losses = Number(record.losses ?? 0);
+        record.draws = Number(record.draws ?? 0);
         record.draws += 1;
         writeStatsRecord(nk, userId, record);
       } catch (e) {
