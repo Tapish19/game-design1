@@ -1,7 +1,7 @@
 // src/lib/nakama-client.ts
 // Singleton Nakama client + socket manager
-import { Client } from "@heroiclabs/nakama-js";
-import type { Session, Match, Socket } from "@heroiclabs/nakama-js";
+import { Client } from "./vendor/nakama-js";
+import type { Session, Match, Socket } from "./vendor/nakama-js";
 
 const HOST = "game-design1.onrender.com";
 const PORT = "443";
