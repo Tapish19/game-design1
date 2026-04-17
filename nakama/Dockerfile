@@ -3,4 +3,4 @@ FROM heroiclabs/nakama:3.22.0
 COPY ./data/modules /nakama/data/modules
 COPY ./local.yml /nakama/data/local.yml
 
-CMD sh -c 'echo "ENV_VAR_CHECK=$DATABASE_ADDRESS" && sleep 20'
+CMD ["sh", "-c", "/nakama/nakama migrate up --database.address=postgresql://tapish199_gmail_com:e3v8zv4MYnVcSq9d210F8Q@woolly-larva-14771.jxf.gcp-asia-south1.cockroachlabs.cloud:26257/nakama?sslmode=require && exec /nakama/nakama --config /nakama/data/local.yml --database.address=postgresql://tapish199_gmail_com:e3v8zv4MYnVcSq9d210F8Q@woolly-larva-14771.jxf.gcp-asia-south1.cockroachlabs.cloud:26257/nakama?sslmode=require"]
