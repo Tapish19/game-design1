@@ -183,9 +183,24 @@ export async function getMyStats(): Promise<{
 
   // Some Nakama runtimes/SDK wrappers may double-encode storage values,
   // or wrap the payload in a `{ value: ... }` object. Normalize defensively.
-  const value = typeof parsed === "string"
-    ? JSON.parse(parsed)
-    : (parsed?.value ?? parsed);
+  let value: any = parsed;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      value = {};
+    }
+  }
+  if (value && typeof value === "object" && "value" in value) {
+    value = (value as any).value;
+  }
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      value = {};
+    }
+  }
 
   return {
     wins: Number(value?.wins ?? 0),
