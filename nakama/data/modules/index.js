@@ -66,9 +66,9 @@ function sendToOne(dispatcher, presence, opcode, payload) {
   dispatcher.broadcastMessage(opcode, JSON.stringify(payload), [presence], null, true);
 }
 
-function normalizeStatsRecord(raw) {
+function normalizeStatsRecordDetailed(raw) {
   var empty = { wins: 0, losses: 0, draws: 0 };
-  if (raw === null || raw === undefined) return empty;
+  if (raw === null || raw === undefined) return { stats: empty, valid: false };
 
   var value = raw;
   if (value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "value")) {
@@ -78,16 +78,23 @@ function normalizeStatsRecord(raw) {
     try {
       value = JSON.parse(value);
     } catch (_) {
-      return empty;
+      return { stats: empty, valid: false };
     }
   }
-  if (!value || typeof value !== "object") return empty;
+  if (!value || typeof value !== "object") return { stats: empty, valid: false };
 
   return {
-    wins: Number(value.wins || 0),
-    losses: Number(value.losses || 0),
-    draws: Number(value.draws || 0),
+    stats: {
+      wins: Number(value.wins || 0),
+      losses: Number(value.losses || 0),
+      draws: Number(value.draws || 0),
+    },
+    valid: true,
   };
+}
+
+function normalizeStatsRecord(raw) {
+  return normalizeStatsRecordDetailed(raw).stats;
 }
 
 function readPlayerStatsRecord(nk, userId) {
@@ -97,6 +104,21 @@ function readPlayerStatsRecord(nk, userId) {
   } catch (_) {}
   if (!reads || reads.length === 0) return { wins: 0, losses: 0, draws: 0 };
   return normalizeStatsRecord(reads[0].value);
+}
+
+function readPlayerStatsRecordMeta(nk, userId) {
+  var reads = [];
+  try {
+    reads = nk.storageRead([{ collection: "player_stats", key: "record", userId: userId }]);
+  } catch (_) {
+    return { stats: { wins: 0, losses: 0, draws: 0 }, valid: false };
+  }
+
+  if (!reads || reads.length === 0) {
+    return { stats: { wins: 0, losses: 0, draws: 0 }, valid: false };
+  }
+
+  return normalizeStatsRecordDetailed(reads[0].value);
 }
 
 function writePlayerStatsRecord(nk, userId, record) {
@@ -418,24 +440,34 @@ function rpcGetLeaderboard(ctx, logger, nk, payload) {
     .filter(function (id) { return typeof id === "string" && id.length > 0; });
 
   var statsByUserId = {};
+  var statsValidByUserId = {};
   for (var i = 0; i < userIds.length; i += 1) {
     var ownerId = userIds[i];
-    statsByUserId[ownerId] = readPlayerStatsRecord(nk, ownerId);
+    var statsMeta = readPlayerStatsRecordMeta(nk, ownerId);
+    statsByUserId[ownerId] = statsMeta.stats;
+    statsValidByUserId[ownerId] = statsMeta.valid;
   }
 
   var entries = records.map(function (r) {
     var userId = r.ownerId || r.owner_id;
     var stats = statsByUserId[userId] || { wins: 0, losses: 0, draws: 0 };
     var leaderboardWins = Number(r.score || 0);
-    var statsLosses = Number(stats.losses || 0);
-    var statsDraws = Number(stats.draws || 0);
+    var statsWins = Number(stats.wins || 0);
+    if (leaderboardWins !== statsWins) {
+      logger.warn(
+        "Leaderboard/stat mismatch for user %v (leaderboard=%v, stats=%v)",
+        userId,
+        leaderboardWins,
+        statsWins
+      );
+    }
     return {
       rank: r.rank,
       userId: userId,
       username: r.username || "Unknown",
-      wins: leaderboardWins,
-      losses: statsLosses,
-      draws: statsDraws,
+      wins: statsWins,
+      losses: stats.losses,
+      draws: stats.draws,
     };
   });
   return JSON.stringify({ entries: entries });
