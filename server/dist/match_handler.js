@@ -93,7 +93,14 @@ function readStatsRecord(nk, userId) {
     return parseStatsRecord(records[0].value);
 }
 function writeStatsRecord(nk, userId, record) {
-    const writeBase = {
+    const writeBaseSnake = {
+        collection: "player_stats",
+        key: "record",
+        value: JSON.stringify(record),
+        permission_read: 2,
+        permission_write: 0,
+    };
+    const writeBaseCamel = {
         collection: "player_stats",
         key: "record",
         value: JSON.stringify(record),
@@ -101,11 +108,11 @@ function writeStatsRecord(nk, userId, record) {
         permissionWrite: 0,
     };
     try {
-        nk.storageWrite([{ ...writeBase, userId }]);
+        nk.storageWrite([{ ...writeBaseSnake, user_id: userId }]);
         return;
     }
     catch { }
-    nk.storageWrite([{ ...writeBase, user_id: userId }]);
+    nk.storageWrite([{ ...writeBaseCamel, userId }]);
 }
 function buildGameStatePayload(state, presenceUserId) {
     const playerList = Object.values(state.players).map(p => ({
@@ -129,7 +136,7 @@ function sendToOne(dispatcher, presence, opcode, payload) {
     dispatcher.broadcastMessage(opcode, JSON.stringify(payload), [presence], null, true);
 }
 function resolveWinner(state, winMark, nk, logger) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
     state.status = "finished";
     if (winMark === "draw") {
         state.winner = "draw";
@@ -150,6 +157,9 @@ function resolveWinner(state, winMark, nk, logger) {
         }
         try {
             const winnerRecord = readStatsRecord(nk, state.winner);
+            winnerRecord.wins = Number((_d = winnerRecord.wins) !== null && _d !== void 0 ? _d : 0);
+            winnerRecord.losses = Number((_e = winnerRecord.losses) !== null && _e !== void 0 ? _e : 0);
+            winnerRecord.draws = Number((_f = winnerRecord.draws) !== null && _f !== void 0 ? _f : 0);
             winnerRecord.wins += 1;
             writeStatsRecord(nk, state.winner, winnerRecord);
         }
@@ -159,6 +169,9 @@ function resolveWinner(state, winMark, nk, logger) {
         if (loserId) {
             try {
                 const record = readStatsRecord(nk, loserId);
+                record.wins = Number((_g = record.wins) !== null && _g !== void 0 ? _g : 0);
+                record.losses = Number((_h = record.losses) !== null && _h !== void 0 ? _h : 0);
+                record.draws = Number((_j = record.draws) !== null && _j !== void 0 ? _j : 0);
                 record.losses += 1;
                 writeStatsRecord(nk, loserId, record);
             }
@@ -172,6 +185,9 @@ function resolveWinner(state, winMark, nk, logger) {
         for (const userId of state.playerOrder) {
             try {
                 let record = readStatsRecord(nk, userId);
+                record.wins = Number((_k = record.wins) !== null && _k !== void 0 ? _k : 0);
+                record.losses = Number((_l = record.losses) !== null && _l !== void 0 ? _l : 0);
+                record.draws = Number((_m = record.draws) !== null && _m !== void 0 ? _m : 0);
                 record.draws += 1;
                 writeStatsRecord(nk, userId, record);
             }
