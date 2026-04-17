@@ -45,6 +45,12 @@ interface MatchState {
   timedMode: boolean;
 }
 
+interface StatsRecord {
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function emptyBoard(): (Mark | null)[] {
@@ -62,6 +68,37 @@ function checkWinner(board: (Mark | null)[]): Mark | "draw" | null {
 
 function boardToPublic(board: (Mark | null)[]): string[] {
   return board.map(c => c ?? "");
+}
+
+function parseStatsRecord(raw: unknown): StatsRecord {
+  const empty: StatsRecord = { wins: 0, losses: 0, draws: 0 };
+  if (raw == null) return empty;
+
+  let value: any = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return empty;
+    }
+  }
+  if (value && typeof value === "object" && "value" in value) {
+    value = (value as any).value;
+  }
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return empty;
+    }
+  }
+  if (!value || typeof value !== "object") return empty;
+
+  return {
+    wins: Number((value as any).wins ?? 0),
+    losses: Number((value as any).losses ?? 0),
+    draws: Number((value as any).draws ?? 0),
+  };
 }
 
 function buildGameStatePayload(state: MatchState, presenceUserId?: string) {
@@ -129,9 +166,10 @@ function resolveWinner(
       );
       if (loserId) {
         // track losses on a separate leaderboard or via storage
-        const loserKey = `stats:${loserId}`;
         const existing = nk.storageRead([{ collection: "player_stats", key: "record", userId: loserId }]);
-        let record = existing.length > 0 ? JSON.parse(existing[0].value) : { wins: 0, losses: 0, draws: 0 };
+        let record = existing.length > 0
+          ? parseStatsRecord(existing[0].value)
+          : { wins: 0, losses: 0, draws: 0 };
         record.losses += 1;
         nk.storageWrite([{
           collection: "player_stats",
@@ -144,7 +182,9 @@ function resolveWinner(
       }
       // Winner storage
       const winnerExisting = nk.storageRead([{ collection: "player_stats", key: "record", userId: state.winner }]);
-      let winnerRecord = winnerExisting.length > 0 ? JSON.parse(winnerExisting[0].value) : { wins: 0, losses: 0, draws: 0 };
+      let winnerRecord = winnerExisting.length > 0
+        ? parseStatsRecord(winnerExisting[0].value)
+        : { wins: 0, losses: 0, draws: 0 };
       winnerRecord.wins += 1;
       nk.storageWrite([{
         collection: "player_stats",
@@ -162,7 +202,9 @@ function resolveWinner(
     for (const userId of state.playerOrder) {
       try {
         const existing = nk.storageRead([{ collection: "player_stats", key: "record", userId }]);
-        let record = existing.length > 0 ? JSON.parse(existing[0].value) : { wins: 0, losses: 0, draws: 0 };
+        let record = existing.length > 0
+          ? parseStatsRecord(existing[0].value)
+          : { wins: 0, losses: 0, draws: 0 };
         record.draws += 1;
         nk.storageWrite([{
           collection: "player_stats",
