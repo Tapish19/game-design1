@@ -54,7 +54,8 @@ function readStatsRecord(nk: nkruntime.Nakama, userId: string): StatsRecord {
     records = nk.storageRead([{
       collection: "player_stats",
       key: "record",
-      userId,
+      // @ts-ignore runtime variant compatibility
+      user_id: userId,
     }]);
   } catch {}
 
@@ -63,8 +64,7 @@ function readStatsRecord(nk: nkruntime.Nakama, userId: string): StatsRecord {
       records = nk.storageRead([{
         collection: "player_stats",
         key: "record",
-        // @ts-ignore runtime variant compatibility
-        user_id: userId,
+        userId,
       }]);
     } catch {}
   }
@@ -126,16 +126,7 @@ const rpcGetStats: nkruntime.RpcFunction = (
   ctx, logger, nk, payload
 ) => {
   if (!ctx.userId) throw new Error("Not authenticated");
-
-  const records = nk.storageRead([{
-    collection: "player_stats",
-    key: "record",
-    userId: ctx.userId,
-  }]);
-  if (records.length === 0) {
-    return JSON.stringify(readStatsRecord(nk, ctx.userId));
-  }
-  return JSON.stringify(normalizeStatsRecord(records[0].value));
+  return JSON.stringify(readStatsRecord(nk, ctx.userId));
 };
 
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
