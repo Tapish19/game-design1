@@ -36,6 +36,32 @@ function normalizeStatsRecord(raw) {
         draws: Number((_c = value.draws) !== null && _c !== void 0 ? _c : 0),
     };
 }
+function readStatsRecord(nk, userId) {
+    let records = [];
+    try {
+        records = nk.storageRead([{
+                collection: "player_stats",
+                key: "record",
+                userId,
+            }]);
+    }
+    catch { }
+    if (!records || records.length === 0) {
+        try {
+            records = nk.storageRead([{
+                    collection: "player_stats",
+                    key: "record",
+                    // @ts-ignore runtime variant compatibility
+                    user_id: userId,
+                }]);
+        }
+        catch { }
+    }
+    if (!records || records.length === 0) {
+        return { wins: 0, losses: 0, draws: 0 };
+    }
+    return normalizeStatsRecord(records[0].value);
+}
 // ── RPC: Create or find a match ──────────────────────────────────────────────
 const rpcFindMatch = (ctx, logger, nk, payload) => {
     let mode = "classic";
@@ -82,13 +108,13 @@ const rpcGetStats = (ctx, logger, nk, payload) => {
             userId: ctx.userId,
         }]);
     if (records.length === 0) {
-        return JSON.stringify({ wins: 0, losses: 0, draws: 0 });
+        return JSON.stringify(readStatsRecord(nk, ctx.userId));
     }
     return JSON.stringify(normalizeStatsRecord(records[0].value));
 };
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
 const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
-    var _a, _b;
+    var _a;
     let result = null;
     const nkAny = nk;
     try {
@@ -109,19 +135,9 @@ const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
     const userIds = records
         .map((r) => { var _a; return (_a = r.ownerId) !== null && _a !== void 0 ? _a : r.owner_id; })
         .filter((id) => typeof id === "string" && id.length > 0);
-    const statsRecords = userIds.length > 0
-        ? nk.storageRead(userIds.map((userId) => ({
-            collection: "player_stats",
-            key: "record",
-            userId,
-        })))
-        : [];
     const statsByUserId = new Map();
-    for (const record of statsRecords) {
-        const userId = (_b = record.userId) !== null && _b !== void 0 ? _b : record.user_id;
-        if (typeof userId === "string" && userId.length > 0) {
-            statsByUserId.set(userId, normalizeStatsRecord(record.value));
-        }
+    for (const userId of userIds) {
+        statsByUserId.set(userId, readStatsRecord(nk, userId));
     }
     const entries = records.map((r) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j;

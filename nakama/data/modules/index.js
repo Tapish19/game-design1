@@ -66,25 +66,82 @@ function sendToOne(dispatcher, presence, opcode, payload) {
   dispatcher.broadcastMessage(opcode, JSON.stringify(payload), [presence], null, true);
 }
 
-function updateStats(nk, userId, change) {
-  var existing = nk.storageRead([{ collection: "player_stats", key: "record", userId: userId }]);
-  var record = { wins: 0, losses: 0, draws: 0 };
-  if (existing.length > 0) {
+function normalizeStatsRecord(raw) {
+  var empty = { wins: 0, losses: 0, draws: 0 };
+  if (raw === null || raw === undefined) return empty;
+
+  var value = raw;
+  if (typeof value === "string") {
     try {
-      record = JSON.parse(existing[0].value);
+      value = JSON.parse(value);
+    } catch (_) {
+      return empty;
+    }
+  }
+  if (value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "value")) {
+    value = value.value;
+  }
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch (_) {
+      return empty;
+    }
+  }
+  if (!value || typeof value !== "object") return empty;
+
+  return {
+    wins: Number(value.wins || 0),
+    losses: Number(value.losses || 0),
+    draws: Number(value.draws || 0),
+  };
+}
+
+function readPlayerStatsRecord(nk, userId) {
+  var reads = [];
+  try {
+    reads = nk.storageRead([{ collection: "player_stats", key: "record", userId: userId }]);
+  } catch (_) {}
+  if (!reads || reads.length === 0) {
+    try {
+      reads = nk.storageRead([{ collection: "player_stats", key: "record", user_id: userId }]);
     } catch (_) {}
   }
-  record.wins += change.wins || 0;
-  record.losses += change.losses || 0;
-  record.draws += change.draws || 0;
-  nk.storageWrite([{
+  if (!reads || reads.length === 0) return { wins: 0, losses: 0, draws: 0 };
+  return normalizeStatsRecord(reads[0].value);
+}
+
+function writePlayerStatsRecord(nk, userId, record) {
+  var payloadCamel = {
     collection: "player_stats",
     key: "record",
     userId: userId,
     value: JSON.stringify(record),
     permissionRead: 2,
     permissionWrite: 0,
-  }]);
+  };
+  var payloadSnake = {
+    collection: "player_stats",
+    key: "record",
+    user_id: userId,
+    value: JSON.stringify(record),
+    permission_read: 2,
+    permission_write: 0,
+  };
+
+  try {
+    nk.storageWrite([payloadCamel]);
+  } catch (_) {
+    nk.storageWrite([payloadSnake]);
+  }
+}
+
+function updateStats(nk, userId, change) {
+  var record = readPlayerStatsRecord(nk, userId);
+  record.wins += change.wins || 0;
+  record.losses += change.losses || 0;
+  record.draws += change.draws || 0;
+  writePlayerStatsRecord(nk, userId, record);
 }
 
 function finishGame(state, nk, logger, winnerValue) {
@@ -93,7 +150,11 @@ function finishGame(state, nk, logger, winnerValue) {
   if (winnerValue === "draw") {
     state.winner = "draw";
     for (var i = 0; i < state.playerOrder.length; i += 1) {
-      updateStats(nk, state.playerOrder[i], { draws: 1 });
+      try {
+        updateStats(nk, state.playerOrder[i], { draws: 1 });
+      } catch (drawErr) {
+        logger.error("Failed to persist draw for user %v: %v", state.playerOrder[i], drawErr);
+      }
     }
     return;
   }
@@ -122,10 +183,22 @@ function finishGame(state, nk, logger, winnerValue) {
       0,
       {}
     );
+  } catch (lbErr) {
+    logger.error("Failed to write leaderboard win for user %v: %v", winnerUserId, lbErr);
+  }
+
+  try {
     updateStats(nk, winnerUserId, { wins: 1 });
-    if (loserUserId) updateStats(nk, loserUserId, { losses: 1 });
-  } catch (e) {
-    logger.error("Failed to persist results: %v", e);
+  } catch (winnerStatsErr) {
+    logger.error("Failed to write winner stats for user %v: %v", winnerUserId, winnerStatsErr);
+  }
+
+  if (loserUserId) {
+    try {
+      updateStats(nk, loserUserId, { losses: 1 });
+    } catch (loserStatsErr) {
+      logger.error("Failed to write loser stats for user %v: %v", loserUserId, loserStatsErr);
+    }
   }
 }
 
@@ -342,9 +415,7 @@ function rpcCreateRoom(ctx, logger, nk, payload) {
 function rpcGetStats(ctx, logger, nk, payload) {
   var userId = ctx && (ctx.userId || ctx.user_id);
   if (!userId) throw new Error("Not authenticated");
-  var records = nk.storageRead([{ collection: "player_stats", key: "record", userId: userId }]);
-  if (records.length === 0) return JSON.stringify({ wins: 0, losses: 0, draws: 0 });
-  return records[0].value;
+  return JSON.stringify(readPlayerStatsRecord(nk, userId));
 }
 
 function rpcGetLeaderboard(ctx, logger, nk, payload) {
@@ -367,12 +438,26 @@ function rpcGetLeaderboard(ctx, logger, nk, payload) {
     records = result;
   }
 
+  var userIds = records
+    .map(function (r) { return r.ownerId || r.owner_id; })
+    .filter(function (id) { return typeof id === "string" && id.length > 0; });
+
+  var statsByUserId = {};
+  for (var i = 0; i < userIds.length; i += 1) {
+    var ownerId = userIds[i];
+    statsByUserId[ownerId] = readPlayerStatsRecord(nk, ownerId);
+  }
+
   var entries = records.map(function (r) {
+    var userId = r.ownerId || r.owner_id;
+    var stats = statsByUserId[userId] || { wins: 0, losses: 0, draws: 0 };
     return {
       rank: r.rank,
-      userId: r.ownerId || r.owner_id,
+      userId: userId,
       username: r.username || "Unknown",
       wins: r.score || 0,
+      losses: stats.losses,
+      draws: stats.draws,
     };
   });
   return JSON.stringify({ entries: entries });

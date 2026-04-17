@@ -48,6 +48,33 @@ function normalizeStatsRecord(raw: unknown): StatsRecord {
   };
 }
 
+function readStatsRecord(nk: nkruntime.Nakama, userId: string): StatsRecord {
+  let records: any[] = [];
+  try {
+    records = nk.storageRead([{
+      collection: "player_stats",
+      key: "record",
+      userId,
+    }]);
+  } catch {}
+
+  if (!records || records.length === 0) {
+    try {
+      records = nk.storageRead([{
+        collection: "player_stats",
+        key: "record",
+        // @ts-ignore runtime variant compatibility
+        user_id: userId,
+      }]);
+    } catch {}
+  }
+
+  if (!records || records.length === 0) {
+    return { wins: 0, losses: 0, draws: 0 };
+  }
+  return normalizeStatsRecord(records[0].value);
+}
+
 // ── RPC: Create or find a match ──────────────────────────────────────────────
 
 const rpcFindMatch: nkruntime.RpcFunction = (
@@ -105,9 +132,8 @@ const rpcGetStats: nkruntime.RpcFunction = (
     key: "record",
     userId: ctx.userId,
   }]);
-
   if (records.length === 0) {
-    return JSON.stringify({ wins: 0, losses: 0, draws: 0 });
+    return JSON.stringify(readStatsRecord(nk, ctx.userId));
   }
   return JSON.stringify(normalizeStatsRecord(records[0].value));
 };
@@ -138,20 +164,9 @@ const rpcGetLeaderboard: nkruntime.RpcFunction = (
   const userIds = records
     .map((r: any) => r.ownerId ?? r.owner_id)
     .filter((id: unknown): id is string => typeof id === "string" && id.length > 0);
-  const statsRecords = userIds.length > 0
-    ? nk.storageRead(userIds.map((userId) => ({
-      collection: "player_stats",
-      key: "record",
-      userId,
-    })))
-    : [];
-
   const statsByUserId = new Map<string, StatsRecord>();
-  for (const record of statsRecords) {
-    const userId = (record as any).userId ?? (record as any).user_id;
-    if (typeof userId === "string" && userId.length > 0) {
-      statsByUserId.set(userId, normalizeStatsRecord(record.value));
-    }
+  for (const userId of userIds) {
+    statsByUserId.set(userId, readStatsRecord(nk, userId));
   }
 
   const entries = records.map((r: any) => ({
