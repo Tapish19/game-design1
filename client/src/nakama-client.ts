@@ -1,12 +1,12 @@
 // src/lib/nakama-client.ts
 // Singleton Nakama client + socket manager
 
-import { Client, Socket } from "./vendor/nakama-js";
-import type { Session, Match } from "./vendor/nakama-js";
+import { Client, Socket } from "@heroiclabs/nakama-js";
+import type { Session, Match } from "@heroiclabs/nakama-js";
 
-const HOST = import.meta.env.VITE_NAKAMA_HOST ?? "127.0.0.1";
-const PORT = Number(import.meta.env.VITE_NAKAMA_PORT ?? 7350);
-const USE_SSL = import.meta.env.VITE_NAKAMA_SSL === "true";
+const HOST = "game-design1.onrender.com";
+const PORT = "443";
+const USE_SSL = true;
 const SERVER_KEY = import.meta.env.VITE_NAKAMA_KEY ?? "defaultkey";
 const HTTP_KEY = import.meta.env.VITE_NAKAMA_HTTP_KEY ?? "defaulthttpkey";
 export const OpCode = {
