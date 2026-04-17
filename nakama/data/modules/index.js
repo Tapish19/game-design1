@@ -426,13 +426,16 @@ function rpcGetLeaderboard(ctx, logger, nk, payload) {
   var entries = records.map(function (r) {
     var userId = r.ownerId || r.owner_id;
     var stats = statsByUserId[userId] || { wins: 0, losses: 0, draws: 0 };
+    var leaderboardWins = Number(r.score || 0);
+    var statsLosses = Number(stats.losses || 0);
+    var statsDraws = Number(stats.draws || 0);
     return {
       rank: r.rank,
       userId: userId,
       username: r.username || "Unknown",
-      wins: r.score || 0,
-      losses: stats.losses,
-      draws: stats.draws,
+      wins: leaderboardWins,
+      losses: statsLosses,
+      draws: statsDraws,
     };
   });
   return JSON.stringify({ entries: entries });
