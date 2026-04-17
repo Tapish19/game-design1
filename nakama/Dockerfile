@@ -5,10 +5,4 @@ COPY ./local.yml /nakama/data/local.yml
 
 ENTRYPOINT ["/bin/sh", "-ecx"]
 
-CMD ["
-  /nakama/nakama migrate up \
-    --database.address ${DATABASE_ADDRESS:-root@cockroachdb.internal:26257/nakama} && \
-  exec /nakama/nakama \
-    --config /nakama/data/local.yml \
-    --database.address ${DATABASE_ADDRESS:-root@cockroachdb.internal:26257/nakama}
-"]
+CMD /nakama/nakama migrate up --database.address ${DATABASE_ADDRESS} && exec /nakama/nakama --config /nakama/data/local.yml --database.address ${DATABASE_ADDRESS}
