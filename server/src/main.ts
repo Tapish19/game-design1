@@ -48,28 +48,52 @@ function normalizeStatsRecord(raw: unknown): StatsRecord {
   };
 }
 
-function readStatsRecord(nk: nkruntime.Nakama, userId: string): StatsRecord {
+function summarizeRecords(records: any[]): string {
+  const summary = (records ?? []).slice(0, 2).map((record: any) => ({
+    userId: record?.userId ?? record?.user_id ?? record?.user?.id ?? null,
+    key: record?.key ?? null,
+    collection: record?.collection ?? null,
+    value: record?.value ?? null,
+  }));
+  return JSON.stringify(summary);
+}
+
+function readStatsRecord(
+  nk: nkruntime.Nakama,
+  userId: string,
+  logger?: nkruntime.Logger,
+  source: string = "unknown"
+): StatsRecord {
   let records: any[] = [];
   try {
+    logger?.info("[stats-read:%v] trying user_id for %v", source, userId);
     records = nk.storageRead([{
       collection: "player_stats",
       key: "record",
-      userId,
+      // @ts-ignore runtime variant compatibility
+      user_id: userId,
     }]);
-  } catch {}
-
-  if (!records || records.length === 0) {
-    try {
-      records = nk.storageRead([{
-        collection: "player_stats",
-        key: "record",
-        // @ts-ignore runtime variant compatibility
-        user_id: userId,
-      }]);
-    } catch {}
+    logger?.info("[stats-read:%v] user_id returned %v records: %v", source, records.length, summarizeRecords(records));
+  } catch (e) {
+    logger?.error("[stats-read:%v] user_id read failed for %v: %v", source, userId, e);
   }
 
   if (!records || records.length === 0) {
+    try {
+      logger?.info("[stats-read:%v] trying userId for %v", source, userId);
+      records = nk.storageRead([{
+        collection: "player_stats",
+        key: "record",
+        userId,
+      }]);
+      logger?.info("[stats-read:%v] userId returned %v records: %v", source, records.length, summarizeRecords(records));
+    } catch (e) {
+      logger?.error("[stats-read:%v] userId read failed for %v: %v", source, userId, e);
+    }
+  }
+
+  if (!records || records.length === 0) {
+    logger?.info("[stats-read:%v] no stats found for %v; defaulting to 0/0/0", source, userId);
     return { wins: 0, losses: 0, draws: 0 };
   }
   return normalizeStatsRecord(records[0].value);
@@ -126,16 +150,7 @@ const rpcGetStats: nkruntime.RpcFunction = (
   ctx, logger, nk, payload
 ) => {
   if (!ctx.userId) throw new Error("Not authenticated");
-
-  const records = nk.storageRead([{
-    collection: "player_stats",
-    key: "record",
-    userId: ctx.userId,
-  }]);
-  if (records.length === 0) {
-    return JSON.stringify(readStatsRecord(nk, ctx.userId));
-  }
-  return JSON.stringify(normalizeStatsRecord(records[0].value));
+  return JSON.stringify(readStatsRecord(nk, ctx.userId, logger, "rpc_get_stats"));
 };
 
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
@@ -166,7 +181,7 @@ const rpcGetLeaderboard: nkruntime.RpcFunction = (
     .filter((id: unknown): id is string => typeof id === "string" && id.length > 0);
   const statsByUserId = new Map<string, StatsRecord>();
   for (const userId of userIds) {
-    statsByUserId.set(userId, readStatsRecord(nk, userId));
+    statsByUserId.set(userId, readStatsRecord(nk, userId, logger, "rpc_get_leaderboard"));
   }
 
   const entries = records.map((r: any) => ({

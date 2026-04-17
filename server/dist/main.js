@@ -36,28 +36,49 @@ function normalizeStatsRecord(raw) {
         draws: Number((_c = value.draws) !== null && _c !== void 0 ? _c : 0),
     };
 }
-function readStatsRecord(nk, userId) {
+function summarizeRecords(records) {
+    const summary = (records !== null && records !== void 0 ? records : []).slice(0, 2).map((record) => {
+        var _a, _b, _c, _d, _e, _f, _g;
+        return ({
+            userId: (_d = (_b = (_a = record === null || record === void 0 ? void 0 : record.userId) !== null && _a !== void 0 ? _a : record === null || record === void 0 ? void 0 : record.user_id) !== null && _b !== void 0 ? _b : (_c = record === null || record === void 0 ? void 0 : record.user) === null || _c === void 0 ? void 0 : _c.id) !== null && _d !== void 0 ? _d : null,
+            key: (_e = record === null || record === void 0 ? void 0 : record.key) !== null && _e !== void 0 ? _e : null,
+            collection: (_f = record === null || record === void 0 ? void 0 : record.collection) !== null && _f !== void 0 ? _f : null,
+            value: (_g = record === null || record === void 0 ? void 0 : record.value) !== null && _g !== void 0 ? _g : null,
+        });
+    });
+    return JSON.stringify(summary);
+}
+function readStatsRecord(nk, userId, logger, source = "unknown") {
     let records = [];
     try {
+        logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] trying user_id for %v", source, userId);
         records = nk.storageRead([{
                 collection: "player_stats",
                 key: "record",
-                userId,
+                // @ts-ignore runtime variant compatibility
+                user_id: userId,
             }]);
+        logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] user_id returned %v records: %v", source, records.length, summarizeRecords(records));
     }
-    catch { }
+    catch (e) {
+        logger === null || logger === void 0 ? void 0 : logger.error("[stats-read:%v] user_id read failed for %v: %v", source, userId, e);
+    }
     if (!records || records.length === 0) {
         try {
+            logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] trying userId for %v", source, userId);
             records = nk.storageRead([{
                     collection: "player_stats",
                     key: "record",
-                    // @ts-ignore runtime variant compatibility
-                    user_id: userId,
+                    userId,
                 }]);
+            logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] userId returned %v records: %v", source, records.length, summarizeRecords(records));
         }
-        catch { }
+        catch (e) {
+            logger === null || logger === void 0 ? void 0 : logger.error("[stats-read:%v] userId read failed for %v: %v", source, userId, e);
+        }
     }
     if (!records || records.length === 0) {
+        logger === null || logger === void 0 ? void 0 : logger.info("[stats-read:%v] no stats found for %v; defaulting to 0/0/0", source, userId);
         return { wins: 0, losses: 0, draws: 0 };
     }
     return normalizeStatsRecord(records[0].value);
@@ -102,15 +123,7 @@ const rpcCreateRoom = (ctx, logger, nk, payload) => {
 const rpcGetStats = (ctx, logger, nk, payload) => {
     if (!ctx.userId)
         throw new Error("Not authenticated");
-    const records = nk.storageRead([{
-            collection: "player_stats",
-            key: "record",
-            userId: ctx.userId,
-        }]);
-    if (records.length === 0) {
-        return JSON.stringify(readStatsRecord(nk, ctx.userId));
-    }
-    return JSON.stringify(normalizeStatsRecord(records[0].value));
+    return JSON.stringify(readStatsRecord(nk, ctx.userId, logger, "rpc_get_stats"));
 };
 // ── RPC: Get leaderboard ─────────────────────────────────────────────────────
 const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
@@ -137,7 +150,7 @@ const rpcGetLeaderboard = (ctx, logger, nk, payload) => {
         .filter((id) => typeof id === "string" && id.length > 0);
     const statsByUserId = new Map();
     for (const userId of userIds) {
-        statsByUserId.set(userId, readStatsRecord(nk, userId));
+        statsByUserId.set(userId, readStatsRecord(nk, userId, logger, "rpc_get_leaderboard"));
     }
     const entries = records.map((r) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j;
