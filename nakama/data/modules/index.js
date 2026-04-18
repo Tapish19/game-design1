@@ -142,23 +142,23 @@ function updateStats(nk, userId, change) {
   writePlayerStatsRecord(nk, userId, record);
 }
 
-if (winnerValue === "draw") {
-  state.winner = "draw";
+function finishGame(state, nk, logger, winnerValue) {
+  state.status = "finished";
 
-  var playerIds = Object.keys(state.players);   // ✅ correct source
+  if (winnerValue === "draw") {
+    state.winner = "draw";
 
-  for (var i = 0; i < playerIds.length; i++) {
-    var userId = state.players[playerIds[i]].userId;
-
-    try {
-      updateStats(nk, userId, { draws: 1 });
-    } catch (err) {
-      logger.error("Failed to persist draw for user %v: %v", userId, err);
+    var playerIds = Object.keys(state.players);
+    for (var i = 0; i < playerIds.length; i += 1) {
+      var drawUserId = state.players[playerIds[i]].userId;
+      try {
+        updateStats(nk, drawUserId, { draws: 1 });
+      } catch (drawErr) {
+        logger.error("Failed to persist draw for user %v: %v", drawUserId, drawErr);
+      }
     }
+    return;
   }
-
-  return;
-}
 
   var winnerUserId = null;
   var all = Object.keys(state.players);
@@ -174,13 +174,12 @@ if (winnerValue === "draw") {
   if (!winnerUserId) return;
 
   var loserUserId = null;
-
-for (var i = 0; i < state.playerOrder.length; i++) {
-  if (state.playerOrder[i] !== winnerUserId) {
-    loserUserId = state.playerOrder[i];
-    break;
+  for (var k = 0; k < state.playerOrder.length; k += 1) {
+    if (state.playerOrder[k] !== winnerUserId) {
+      loserUserId = state.playerOrder[k];
+      break;
+    }
   }
-}
 
   try {
     nk.leaderboardRecordWrite(
