@@ -170,7 +170,14 @@ function finishGame(state, nk, logger, winnerValue) {
   state.winner = winnerUserId;
   if (!winnerUserId) return;
 
-  var loserUserId = state.playerOrder[0] === winnerUserId ? state.playerOrder[1] : state.playerOrder[0];
+  var loserUserId = null;
+
+for (var i = 0; i < state.playerOrder.length; i++) {
+  if (state.playerOrder[i] !== winnerUserId) {
+    loserUserId = state.playerOrder[i];
+    break;
+  }
+}
 
   try {
     nk.leaderboardRecordWrite(
