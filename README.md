@@ -194,8 +194,8 @@ Good for a single host setup.
 This project is deployed using:
 
 - CockroachDB CockroachDB Cloud (database)
-- Render Render (Nakama backend)
-- Vercel Vercel (React frontend)
+- Render (Nakama backend)
+- Vercel (React frontend)
 
 #### 1️⃣ CockroachDB Cloud (Database Setup)
 
