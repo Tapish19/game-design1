@@ -182,7 +182,10 @@ function resolveWinner(
 
   // Persist leaderboard scores
   if (state.winner && state.winner !== "draw") {
+    logger.info("Winner ID: %v", state.winner);
+    logger.info("Player Order: %v", state.playerOrder);
     const loserId = state.playerOrder.find(id => id !== state.winner);
+    logger.info("Loser ID: %v", loserId);
 
     try {
       nk.leaderboardRecordWrite(
