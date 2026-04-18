@@ -123,7 +123,7 @@ function writeStatsRecord(
     collection: "player_stats",
     key: "record",
     userId: userId,
-    value: record,   // ✅ NO JSON.stringify
+    value: JSON.stringify(record),    
     permissionRead: 2,
     permissionWrite: 0,
   }]);
