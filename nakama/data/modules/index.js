@@ -465,9 +465,9 @@ function rpcGetLeaderboard(ctx, logger, nk, payload) {
       rank: r.rank,
       userId: userId,
       username: r.username || "Unknown",
-      wins: statsWins,
-      losses: stats.losses,
-      draws: stats.draws,
+      wins: Number(r.score || 0),
+      losses: Number(stats.losses || 0),
+      draws: Number(stats.draws || 0),
     };
   });
   return JSON.stringify({ entries: entries });
