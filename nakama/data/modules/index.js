@@ -126,7 +126,7 @@ function writePlayerStatsRecord(nk, userId, record) {
     collection: "player_stats",
     key: "record",
     userId: userId,
-    value: JSON.stringify(record),
+    value: record,
     permissionRead: 2,
     permissionWrite: 0,
     version: "*",
