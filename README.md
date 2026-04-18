@@ -252,7 +252,7 @@ postgresql://<DB_USER>:<DB_PASSWORD>@<HOST>:26257/<DATABASE_NAME>?sslmode=verify
 ##### Step 1: Create Web Service
 
 - Platform: Docker
-- Image: `heroiclabs/nakama:<VERSION>`
+- Image: `heroiclabs/nakama:3.22.0`
 
 ##### Step 2: Add Runtime Module
 
