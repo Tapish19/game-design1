@@ -53,8 +53,8 @@ curl http://localhost:7350/healthcheck
 
 Nakama console:
 - URL: `http://localhost:7351`
-- Username: `admin`
-- Password: `admin1234`
+- Username: <ADMIN_USERNAME>
+- Password: <ADMIN_PASSWORD>
 
 ### Start the client
 
