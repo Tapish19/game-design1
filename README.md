@@ -1,6 +1,7 @@
 # Multiplayer Tic-Tac-Toe (Nakama + React)
 
 Server-authoritative multiplayer Tic-Tac-Toe built with:
+
 - **Nakama** (real-time game server + RPC)
 - **CockroachDB** (persistent storage)
 - **TypeScript runtime module** for authoritative match logic
@@ -13,6 +14,7 @@ This README covers setup, architecture, deployment, API/server configuration, an
 ## 1) Setup and installation
 
 ### Prerequisites
+
 - Docker + Docker Compose v2
 - Node.js 20+
 - npm
@@ -42,6 +44,7 @@ docker compose up -d
 ```
 
 This starts:
+
 - `cockroachdb` on ports `26257` (SQL) and `8081` (admin UI proxy)
 - `nakama` on ports `7349`, `7350`, `7351`
 
@@ -52,6 +55,7 @@ curl http://localhost:7350/healthcheck
 ```
 
 Nakama console:
+
 - URL: `http://localhost:7351`
 - Username: <ADMIN_USERNAME>
 - Password: <ADMIN_PASSWORD>
@@ -69,7 +73,7 @@ Vite dev server runs at `http://localhost:3000`.
 
 ## 2) Architecture and design decisions
 
-## High-level architecture
+### High-level architecture
 
 ```text
 React Client (Vite)
@@ -80,22 +84,26 @@ React Client (Vite)
                                    └─ CockroachDB
 ```
 
-## Design decisions
+### Design decisions
 
-### Server-authoritative game logic
+#### Server-authoritative game logic
+
 The client sends **intent** (`MAKE_MOVE`), and the Nakama match loop validates and applies all state changes. This prevents client-side cheating and guarantees consistent state across both players.
 
-### Tick-based timing
+#### Tick-based timing
+
 - `TICK_RATE = 5` (200ms loop)
 - `TURN_TIMEOUT_TICKS = 150` (30s timed turn)
 - `DISCONNECT_GRACE_TICKS = 75` (15s reconnect grace)
 
 A tick loop keeps turn timers, disconnect grace windows, and forfeit logic deterministic.
 
-### Match isolation and concurrency
+#### Match isolation and concurrency
+
 Each match maintains an isolated in-memory state object in Nakama, allowing many games to run concurrently without shared mutable match state.
 
-### Persistent progression
+#### Persistent progression
+
 - Global wins leaderboard: `global_wins`
 - Per-player stats in storage object:
   - collection: `player_stats`
@@ -105,8 +113,10 @@ Each match maintains an isolated in-memory state object in Nakama, allowing many
 
 ## 3) API/server configuration details
 
-## Nakama runtime registration
+### Nakama runtime registration
+
 The module registers:
+
 - Match handler: `tictactoe`
 - RPCs:
   - `find_match`
@@ -114,19 +124,19 @@ The module registers:
   - `get_stats`
   - `get_leaderboard`
 
-## RPC API
+### RPC API
 
 | RPC | Input | Output |
-|---|---|---|
+| --- | --- | --- |
 | `find_match` | `{ "mode": "classic" | "timed" }` | `{ "ticket": "..." }` |
 | `create_room` | `{ "mode": "classic" | "timed" }` | `{ "matchId": "..." }` |
 | `get_stats` | none | `{ "wins": n, "losses": n, "draws": n }` |
 | `get_leaderboard` | none | `{ "entries": [{ rank, userId, username, wins, losses, draws }] }` |
 
-## Match WebSocket opcodes
+### Match WebSocket opcodes
 
 | Opcode | Direction | Description |
-|---|---|---|
+| --- | --- | --- |
 | `1` | Server → Client | `GAME_STATE` |
 | `2` | Client → Server | `MAKE_MOVE` |
 | `3` | Reserved | `PLAYER_READY` (defined, not currently used by client flow) |
@@ -135,17 +145,19 @@ The module registers:
 | `6` | Server → Client | `ERROR` |
 | `7` | Server → Client | `OPPONENT_STATUS` |
 
-## Core server config
+### Core server config
+
 From `nakama/local.yml`:
+
 - Runtime JS entrypoint: `index.js`
 - Runtime module path: `/nakama/data/modules`
 - Session token expiry: `7200` seconds
 - Console auth configured in file (local/dev)
 
-## Environment variables
+### Environment variables
 
 | Variable | Example | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `NAKAMA_SERVER_KEY` | `defaultkey` | Shared key used by client + server |
 | `NAKAMA_CONSOLE_USERNAME` | `admin` | Console login user |
 | `NAKAMA_CONSOLE_PASSWORD` | `admin1234` | Console login password |
@@ -161,7 +173,8 @@ From `nakama/local.yml`:
 
 Below are two supported deployment patterns:
 
-## A) Docker Compose production stack (single VM)
+### A) Docker Compose production stack (single VM)
+
 Use:
 
 ```bash
@@ -169,109 +182,148 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 This enables:
+
 - `traefik` TLS termination
 - `frontend` container build with production Vite args
 - `nakama` with production env overrides
 
 Good for a single host setup.
 
-## B) CockroachDB Cloud + Render + Vercel (recommended managed path)
+### B) CockroachDB Cloud + Render + Vercel (recommended managed path)
 
 This project is deployed using:
 
-CockroachDB CockroachDB Cloud (database)
-Render Render (Nakama backend)
-Vercel Vercel (React frontend)
-1️⃣ CockroachDB Cloud (Database Setup)
-Step 1: Create Cluster
-Log into CockroachDB Cloud
-Create a Serverless cluster
-Select region close to your users
+- CockroachDB CockroachDB Cloud (database)
+- Render Render (Nakama backend)
+- Vercel Vercel (React frontend)
 
+#### 1️⃣ CockroachDB Cloud (Database Setup)
 
-Step 2: Create Database
+##### Step 1: Create Cluster
+
+- Log into CockroachDB Cloud
+- Create a Serverless cluster
+- Select region close to your users
+
+##### Step 2: Create Database
+
+```sql
 CREATE DATABASE <DATABASE_NAME>;
-Step 3: Create SQL User
+```
+
+##### Step 3: Create SQL User
+
+```sql
 CREATE USER <DB_USER> WITH PASSWORD '<DB_PASSWORD>';
-Step 4: Grant Permissions
+```
+
+##### Step 4: Grant Permissions
+
+```sql
 GRANT ALL ON DATABASE <DATABASE_NAME> TO <DB_USER>;
 GRANT ALL ON SCHEMA public TO <DB_USER>;
+```
 
 👉 Nakama will automatically create required tables (storage, leaderboard_record, etc.) during first startup.
 
-Step 5: Configure Network Access
-Go to Network Access
-Add:
-0.0.0.0/0
+##### Step 5: Configure Network Access
 
-👉 This allows your backend (Render) to connect.
+Go to Network Access.
+
+Add:
+
+```text
+0.0.0.0/0
+```
+
+👉 This allows your backend (Render) to connect.  
 👉 In production, restrict this to specific IP ranges.
 
-Step 6: Connection String
+##### Step 6: Connection String
 
 Format:
 
+```text
 postgresql://<DB_USER>:<DB_PASSWORD>@<HOST>:26257/<DATABASE_NAME>?sslmode=verify-full
+```
 
-2️⃣ Render (Nakama Backend Deployment)
-Step 1: Create Web Service
-Platform: Docker
-Image:
-heroiclabs/nakama:<VERSION>
-Step 2: Add Runtime Module
+#### 2️⃣ Render (Nakama Backend Deployment)
+
+##### Step 1: Create Web Service
+
+- Platform: Docker
+- Image: `heroiclabs/nakama:<VERSION>`
+
+##### Step 2: Add Runtime Module
 
 Ensure your compiled server file is placed at:
 
+```text
 /nakama/data/modules/index.js
+```
 
 👉 This file contains your match handler and RPC logic.
 
-Step 3: Configure Environment Variables
+##### Step 3: Configure Environment Variables
 
 Set the following in Render:
 
+```text
 NAKAMA_SERVER_KEY=<SERVER_KEY>
 NAKAMA_CONSOLE_USERNAME=<ADMIN_USERNAME>
 NAKAMA_CONSOLE_PASSWORD=<ADMIN_PASSWORD>
 NAKAMA_DATABASE_ADDRESS=<CONNECTION_STRING>
-Step 4: Deploy & Verify
+```
+
+##### Step 4: Deploy & Verify
 
 After deployment:
 
-Backend URL will be:
-https://<RENDER_SERVICE_DOMAIN>
-Test health:
+- Backend URL will be: `https://<RENDER_SERVICE_DOMAIN>`
+- Test health:
+
+```bash
 curl https://<RENDER_SERVICE_DOMAIN>/healthcheck
-Step 5: Verify Nakama Console (Optional)
+```
+
+##### Step 5: Verify Nakama Console (Optional)
 
 Open:
 
+```text
 https://<RENDER_SERVICE_DOMAIN>/console
+```
 
 Login using your console credentials.
 
-3️⃣ Vercel (Frontend Deployment)
-Step 1: Deploy Project
-Import repository into Vercel
-Select client/ as root
-Framework: Vite
-Step 2: Set Environment Variables
+#### 3️⃣ Vercel (Frontend Deployment)
+
+##### Step 1: Deploy Project
+
+- Import repository into Vercel
+- Select `client/` as root
+- Framework: Vite
+
+##### Step 2: Set Environment Variables
+
+```text
 VITE_NAKAMA_HOST=<RENDER_SERVICE_DOMAIN>
 VITE_NAKAMA_PORT=443
 VITE_NAKAMA_SSL=true
 VITE_NAKAMA_KEY=<SERVER_KEY>
+```
 
+##### 5. Smoke test production
 
-5. **Smoke test production**
-   - Open two browser sessions.
-   - Create/join room and complete full match.
-   - Confirm leaderboard updates.
+- Open two browser sessions.
+- Create/join room and complete full match.
+- Confirm leaderboard updates.
 
 ---
 
 ## 5) How to test multiplayer functionality
 
-## Local manual test (required)
+### Local manual test (required)
 
 1. Start backend + client.
 2. Open two browser windows (or one normal + one incognito).
@@ -284,7 +336,7 @@ VITE_NAKAMA_KEY=<SERVER_KEY>
    - Disconnect one client and reconnect within ~15s grace.
    - Leaderboard/stats update after game completion.
 
-## Suggested command checks
+### Suggested command checks
 
 From `server/`:
 
@@ -299,7 +351,8 @@ docker compose ps
 curl http://localhost:7350/healthcheck
 ```
 
-## Optional regression checklist
+### Optional regression checklist
+
 - Create private room via `create_room` RPC.
 - Join matchmade queue via `find_match` RPC in same mode from two clients.
 - Verify `get_stats` reflects wins/losses/draws.
