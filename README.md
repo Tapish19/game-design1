@@ -1,241 +1,275 @@
-# Multiplayer Tic-Tac-Toe · Nakama
+# Multiplayer Tic-Tac-Toe (Nakama + React)
 
-Production-ready server-authoritative multiplayer Tic-Tac-Toe built on [Nakama](https://heroiclabs.com/nakama/).
+Server-authoritative multiplayer Tic-Tac-Toe built with:
+- **Nakama** (real-time game server + RPC)
+- **CockroachDB** (persistent storage)
+- **TypeScript runtime module** for authoritative match logic
+- **React + Vite client**
 
----
-
-## Architecture
-
-```
-client (React + Vite)
-  │  WebSocket (persistent)
-  ▼
-nakama:7350  ←── match handler (TypeScript runtime)
-  │                  • validates every move server-side
-  │                  • manages turn timers via match loop tick
-  │                  • broadcasts authoritative state to both clients
-  ▼
-cockroachdb  ←── users, sessions, storage objects, leaderboard
-```
-
-All game state lives on the server. The client is a pure view — it sends *intents* (move position) and receives *facts* (new board state). Players cannot manipulate state locally.
+This README covers setup, architecture, deployment, API/server configuration, and multiplayer testing.
 
 ---
 
-## Project structure
-
-```
-tictactoe/
-├── server/
-│   ├── src/
-│   │   ├── main.ts           # Module entry — registers RPCs + match handler
-│   │   └── match_handler.ts  # Authoritative game logic
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── client/
-│   ├── src/
-│   │   ├── lib/
-│   │   │   └── nakama-client.ts   # Singleton client + socket manager
-│   │   ├── hooks/
-│   │   │   └── useGame.ts         # Match state + socket event wiring
-│   │   ├── components/
-│   │   │   └── GameBoard.tsx      # Grid, player badges, timer
-│   │   ├── pages/
-│   │   │   ├── Lobby.tsx          # Matchmaking, room create/join
-│   │   │   ├── Game.tsx           # Game page + post-game overlay
-│   │   │   └── Leaderboard.tsx    # Rankings + personal stats
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── Dockerfile
-│   └── nginx.conf
-│
-├── infra/
-│   └── nakama.yml        # Nakama server config
-│
-├── docker-compose.yml          # Local dev stack
-├── docker-compose.prod.yml     # Production overrides + Traefik TLS
-└── Makefile
-```
-
----
-
-## Quick start (local)
+## 1) Setup and installation
 
 ### Prerequisites
 - Docker + Docker Compose v2
 - Node.js 20+
+- npm
 
-### 1 · Build the server runtime
+### Clone and install
 
 ```bash
+git clone <your-repo-url>
+cd game-design1
+
+# Server runtime (Nakama JS module)
 cd server
 npm install
-npm run build          # outputs server/dist/main.js
+npm run build
+
+# Client app
+cd ../client
+npm install
 ```
 
-### 2 · Start the backend stack
+### Run locally with Docker
+
+From repository root:
 
 ```bash
-# From repo root
 docker compose up -d
+```
 
-# Verify Nakama is healthy
+This starts:
+- `cockroachdb` on ports `26257` (SQL) and `8081` (admin UI proxy)
+- `nakama` on ports `7349`, `7350`, `7351`
+
+Health check:
+
+```bash
 curl http://localhost:7350/healthcheck
 ```
 
-Nakama console → http://localhost:7351 (admin / admin)
+Nakama console:
+- URL: `http://localhost:7351`
+- Username: `admin`
+- Password: `admin1234`
 
-### 3 · Start the client dev server
+### Start the client
 
 ```bash
 cd client
-cp .env.example .env.local    # defaults point to localhost
-npm install
-npm run dev                   # http://localhost:3000
+npm run dev
 ```
 
-Open two browser windows to play against yourself.
+Vite dev server runs at `http://localhost:3000`.
 
 ---
 
-## Nakama match handler — key design decisions
+## 2) Architecture and design decisions
 
-### Server tick rate
-`TICK_RATE = 5` (5 ticks/second). The match loop runs every 200 ms, which is fast enough for turn-based play and timer enforcement without excessive CPU use.
+## High-level architecture
 
-### Move validation flow
-```
-client sends MAKE_MOVE (opcode 2)
-  → matchLoop receives message
-  → check: game status === "playing"
-  → check: sender === currentTurnUserId
-  → check: position 0-8 and board[position] === null
-  → apply move to authoritative board
-  → check win / draw
-  → if game over → persist leaderboard → broadcast GAME_OVER
-  → else → advance turn → reset timer → broadcast GAME_STATE
+```text
+React Client (Vite)
+  └─ websocket + RPC ──> Nakama
+                           ├─ match handler (server-authoritative game state)
+                           ├─ RPC endpoints (find/create room, stats, leaderboard)
+                           └─ storage + leaderboard ops
+                                   └─ CockroachDB
 ```
 
-### Turn timer
-`TURN_TIMEOUT_TICKS = 150` (150 ticks ÷ 5 tps = 30 seconds). Decremented every tick in `matchLoop`. When it reaches zero, the active player forfeits and the opponent wins. Timer events are broadcast every second (every 5 ticks) to drive the UI countdown.
+## Design decisions
 
-### Disconnect handling
-When a player's socket closes, `matchLeave` adds them to `state.disconnected` with a tick counter. The match loop increments this counter. After `DISCONNECT_GRACE_TICKS = 75` (15 seconds), the disconnected player forfeits. If they reconnect within the window, their presence is restored and the game continues.
+### Server-authoritative game logic
+The client sends **intent** (`MAKE_MOVE`), and the Nakama match loop validates and applies all state changes. This prevents client-side cheating and guarantees consistent state across both players.
 
-### Concurrent games
-Each Nakama match is fully isolated in its own goroutine with its own state object. There is no shared mutable state between matches. The number of concurrent games is limited only by server memory.
+### Tick-based timing
+- `TICK_RATE = 5` (200ms loop)
+- `TURN_TIMEOUT_TICKS = 150` (30s timed turn)
+- `DISCONNECT_GRACE_TICKS = 75` (15s reconnect grace)
 
----
+A tick loop keeps turn timers, disconnect grace windows, and forfeit logic deterministic.
 
-## Matchmaking modes
+### Match isolation and concurrency
+Each match maintains an isolated in-memory state object in Nakama, allowing many games to run concurrently without shared mutable match state.
 
-| Mode | Description |
-|------|-------------|
-| **Classic** | Standard game, no time limit per turn |
-| **Timed** | 30-second turn timer; forfeit on timeout |
-
-The matchmaker query `properties.mode:timed` ensures players are only paired with others using the same mode.
-
----
-
-## RPCs
-
-| RPC | Payload | Returns |
-|-----|---------|---------|
-| `find_match` | `{ mode: "classic" \| "timed" }` | `{ ticket: string }` — matchmaker ticket |
-| `create_room` | `{ mode: "classic" \| "timed" }` | `{ matchId: string }` — private room code |
-| `get_stats` | — | `{ wins, losses, draws }` |
-| `get_leaderboard` | — | `{ entries: [{ rank, userId, username, wins }] }` |
+### Persistent progression
+- Global wins leaderboard: `global_wins`
+- Per-player stats in storage object:
+  - collection: `player_stats`
+  - key: `record`
 
 ---
 
-## WebSocket opcodes
+## 3) API/server configuration details
 
-| Code | Direction | Meaning |
-|------|-----------|---------|
-| 1 | Server → Client | `GAME_STATE` — full board + metadata |
-| 2 | Client → Server | `MAKE_MOVE` — `{ position: 0-8 }` |
-| 4 | Server → Client | `GAME_OVER` — final state + reason |
-| 5 | Server → Client | `TIMER_TICK` — `{ timeLeft, userId }` |
-| 6 | Server → Client | `ERROR` — `{ message }` |
-| 7 | Server → Client | `OPPONENT_STATUS` — `{ status: "disconnected" \| "reconnected" }` |
+## Nakama runtime registration
+The module registers:
+- Match handler: `tictactoe`
+- RPCs:
+  - `find_match`
+  - `create_room`
+  - `get_stats`
+  - `get_leaderboard`
 
----
+## RPC API
 
-## Production deployment (DigitalOcean example)
+| RPC | Input | Output |
+|---|---|---|
+| `find_match` | `{ "mode": "classic" | "timed" }` | `{ "ticket": "..." }` |
+| `create_room` | `{ "mode": "classic" | "timed" }` | `{ "matchId": "..." }` |
+| `get_stats` | none | `{ "wins": n, "losses": n, "draws": n }` |
+| `get_leaderboard` | none | `{ "entries": [{ rank, userId, username, wins, losses, draws }] }` |
 
-### 1 · Provision a droplet
-A 2 vCPU / 4 GB droplet comfortably handles hundreds of concurrent games.
+## Match WebSocket opcodes
 
-```bash
-# Install Docker
-curl -fsSL https://get.docker.com | sh
-```
+| Opcode | Direction | Description |
+|---|---|---|
+| `1` | Server → Client | `GAME_STATE` |
+| `2` | Client → Server | `MAKE_MOVE` |
+| `3` | Reserved | `PLAYER_READY` (defined, not currently used by client flow) |
+| `4` | Server → Client | `GAME_OVER` |
+| `5` | Server → Client | `TIMER_TICK` |
+| `6` | Server → Client | `ERROR` |
+| `7` | Server → Client | `OPPONENT_STATUS` |
 
-### 2 · Clone and configure
-
-```bash
-git clone https://github.com/yourorg/tictactoe.git
-cd tictactoe
-
-cat > .env.prod <<EOF
-NAKAMA_SERVER_KEY=change-me-strong-random-key
-NAKAMA_CONSOLE_PASSWORD=change-me
-ACME_EMAIL=you@yourdomain.com
-EOF
-```
-
-### 3 · Point DNS
-Add an A record: `api.yourdomain.com` → droplet IP  
-Add an A record: `yourdomain.com` → droplet IP
-
-### 4 · Deploy
-
-```bash
-make deploy
-```
-
-Traefik will provision Let's Encrypt TLS automatically. The game will be live at `https://yourdomain.com`.
-
-### Scaling
-For higher load, run Nakama behind a load balancer with multiple nodes and a shared CockroachDB cluster. Sticky sessions (or a consistent hash on `userId`) ensure WebSocket connections route to the same Nakama node. CockroachDB handles cross-node data consistency.
-
----
-
-## Leaderboard
-
-The global leaderboard uses Nakama's built-in leaderboard system (`leaderboardRecordWrite`). It is `DESCENDING` by score (wins) with no reset schedule (all-time). Win/loss/draw stats are also persisted to Nakama storage objects (`player_stats` collection) for personal stat display.
-
----
+## Core server config
+From `nakama/local.yml`:
+- Runtime JS entrypoint: `index.js`
+- Runtime module path: `/nakama/data/modules`
+- Session token expiry: `7200` seconds
+- Console auth configured in file (local/dev)
 
 ## Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NAKAMA_SERVER_KEY` | `defaultkey` | Shared secret for client–server auth |
-| `NAKAMA_CONSOLE_PASSWORD` | `admin` | Nakama admin console password |
-| `ACME_EMAIL` | — | Email for Let's Encrypt (prod only) |
-| `VITE_NAKAMA_HOST` | `127.0.0.1` | Nakama host (baked into client build) |
-| `VITE_NAKAMA_PORT` | `7350` | Nakama port |
-| `VITE_NAKAMA_SSL` | `false` | Use WSS/HTTPS |
-| `VITE_NAKAMA_KEY` | `defaultkey` | Server key (client-side, not secret) |
+| Variable | Example | Purpose |
+|---|---|---|
+| `NAKAMA_SERVER_KEY` | `defaultkey` | Shared key used by client + server |
+| `NAKAMA_CONSOLE_USERNAME` | `admin` | Console login user |
+| `NAKAMA_CONSOLE_PASSWORD` | `admin1234` | Console login password |
+| `VITE_NAKAMA_HOST` | `127.0.0.1` / `api.example.com` | Client target host |
+| `VITE_NAKAMA_PORT` | `7350` / `443` | Client target port |
+| `VITE_NAKAMA_SSL` | `false` / `true` | ws vs wss |
+| `VITE_NAKAMA_KEY` | same as server key | Client Nakama server key |
+| `ACME_EMAIL` | `ops@example.com` | TLS cert email (Traefik production mode) |
 
 ---
 
-## Bonus features checklist
+## 4) Deployment process documentation
 
-- [x] Server-authoritative game logic (all moves validated server-side)
-- [x] Auto matchmaking (Nakama matchmaker pool)
-- [x] Private rooms (create + join by code)
-- [x] Disconnect handling with grace period + forfeit
-- [x] Concurrent game sessions (isolated per match)
-- [x] Leaderboard (wins, global ranking)
-- [x] Personal stats (wins / losses / draws / win rate)
-- [x] Timed mode (30 s per turn, server-enforced)
-- [x] Auto-forfeit on timeout
-- [x] Mode selection in matchmaking (classic vs timed)
-- [x] TLS + production deployment via Docker Compose + Traefik
+Below are two supported deployment patterns:
+
+## A) Docker Compose production stack (single VM)
+Use:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+This enables:
+- `traefik` TLS termination
+- `frontend` container build with production Vite args
+- `nakama` with production env overrides
+
+Good for a single host setup.
+
+## B) CockroachDB Cloud + Render + Vercel (recommended managed path)
+If your intended platform is:
+- **CockroachDB Cloud** for database
+- **Render** for Nakama/backend runtime
+- **Vercel** for frontend
+
+Use this process:
+
+1. **CockroachDB Cloud**
+   - Create a cluster and SQL user.
+   - Allow inbound network from Render.
+   - Create database/schema expected by Nakama.
+
+2. **Render (Nakama service)**
+   - Deploy Nakama container + mounted runtime module (`server/dist/main.js` bundled in `nakama/data/modules/index.js` workflow).
+   - Set env vars: `NAKAMA_SERVER_KEY`, console creds, and database connection settings.
+   - Expose ports/services so Nakama API is reachable via HTTPS (typically behind Render-managed TLS).
+
+3. **Vercel (React client)**
+   - Deploy `client/` as Vite project.
+   - Set Vercel environment variables:
+     - `VITE_NAKAMA_HOST` = your Render API domain
+     - `VITE_NAKAMA_PORT` = `443`
+     - `VITE_NAKAMA_SSL` = `true`
+     - `VITE_NAKAMA_KEY` = same Nakama server key
+
+4. **CORS / networking checks**
+   - Ensure Nakama endpoint is publicly reachable from browser.
+   - Confirm websocket (wss) connectivity from Vercel origin.
+
+5. **Smoke test production**
+   - Open two browser sessions.
+   - Create/join room and complete full match.
+   - Confirm leaderboard updates.
+
+---
+
+## 5) How to test multiplayer functionality
+
+## Local manual test (required)
+
+1. Start backend + client.
+2. Open two browser windows (or one normal + one incognito).
+3. In both clients, authenticate and join the same mode.
+4. Verify:
+   - Both players receive game state updates.
+   - Turn enforcement works (cannot move out of turn).
+   - Win and draw conditions end match correctly.
+   - In timed mode, timeout causes forfeit after ~30s.
+   - Disconnect one client and reconnect within ~15s grace.
+   - Leaderboard/stats update after game completion.
+
+## Suggested command checks
+
+From `server/`:
+
+```bash
+npm run build
+```
+
+From repo root:
+
+```bash
+docker compose ps
+curl http://localhost:7350/healthcheck
+```
+
+## Optional regression checklist
+- Create private room via `create_room` RPC.
+- Join matchmade queue via `find_match` RPC in same mode from two clients.
+- Verify `get_stats` reflects wins/losses/draws.
+- Verify `get_leaderboard` includes recent winner.
+
+---
+
+## Repository structure
+
+```text
+.
+├── client/
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── GameBoard.tsx
+│   │   ├── Leaderboard.tsx
+│   │   ├── main.tsx
+│   │   ├── useGame.ts
+│   │   └── nakama-client.ts
+├── server/
+│   ├── src/
+│   │   ├── main.ts
+│   │   └── match_handler.ts
+│   └── dist/
+├── nakama/
+│   ├── local.yml
+│   └── data/modules/index.js
+├── docker-compose.yml
+└── docker-compose.prod.yml
+```
