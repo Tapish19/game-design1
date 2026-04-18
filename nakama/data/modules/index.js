@@ -142,20 +142,23 @@ function updateStats(nk, userId, change) {
   writePlayerStatsRecord(nk, userId, record);
 }
 
-function finishGame(state, nk, logger, winnerValue) {
-  state.status = "finished";
+if (winnerValue === "draw") {
+  state.winner = "draw";
 
-  if (winnerValue === "draw") {
-    state.winner = "draw";
-    for (var i = 0; i < state.playerOrder.length; i += 1) {
-      try {
-        updateStats(nk, state.playerOrder[i], { draws: 1 });
-      } catch (drawErr) {
-        logger.error("Failed to persist draw for user %v: %v", state.playerOrder[i], drawErr);
-      }
+  var playerIds = Object.keys(state.players);   // ✅ correct source
+
+  for (var i = 0; i < playerIds.length; i++) {
+    var userId = state.players[playerIds[i]].userId;
+
+    try {
+      updateStats(nk, userId, { draws: 1 });
+    } catch (err) {
+      logger.error("Failed to persist draw for user %v: %v", userId, err);
     }
-    return;
   }
+
+  return;
+}
 
   var winnerUserId = null;
   var all = Object.keys(state.players);
