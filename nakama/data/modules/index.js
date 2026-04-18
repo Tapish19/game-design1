@@ -129,6 +129,7 @@ function writePlayerStatsRecord(nk, userId, record) {
     value: JSON.stringify(record),
     permissionRead: 2,
     permissionWrite: 0,
+    version: "*",
   };
   nk.storageWrite([payload]);
 }
