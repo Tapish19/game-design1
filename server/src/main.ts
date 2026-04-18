@@ -64,39 +64,23 @@ function readStatsRecord(
   logger?: nkruntime.Logger,
   source: string = "unknown"
 ): StatsRecord {
-  let records: any[] = [];
   try {
-    logger?.info("[stats-read:%v] trying user_id for %v", source, userId);
-    records = nk.storageRead([{
+    const records = nk.storageRead([{
       collection: "player_stats",
       key: "record",
-      // @ts-ignore runtime variant compatibility
-      user_id: userId,
+      userId: userId,
     }]);
-    logger?.info("[stats-read:%v] user_id returned %v records: %v", source, records.length, summarizeRecords(records));
-  } catch (e) {
-    logger?.error("[stats-read:%v] user_id read failed for %v: %v", source, userId, e);
-  }
 
-  if (!records || records.length === 0) {
-    try {
-      logger?.info("[stats-read:%v] trying userId for %v", source, userId);
-      records = nk.storageRead([{
-        collection: "player_stats",
-        key: "record",
-        userId,
-      }]);
-      logger?.info("[stats-read:%v] userId returned %v records: %v", source, records.length, summarizeRecords(records));
-    } catch (e) {
-      logger?.error("[stats-read:%v] userId read failed for %v: %v", source, userId, e);
+    if (!records || records.length === 0) {
+      logger?.info("[stats-read:%v] no stats found for %v", source, userId);
+      return { wins: 0, losses: 0, draws: 0 };
     }
-  }
 
-  if (!records || records.length === 0) {
-    logger?.info("[stats-read:%v] no stats found for %v; defaulting to 0/0/0", source, userId);
+    return normalizeStatsRecord(records[0].value);
+  } catch (e) {
+    logger?.error("[stats-read:%v] failed for %v: %v", source, userId, e);
     return { wins: 0, losses: 0, draws: 0 };
   }
-  return normalizeStatsRecord(records[0].value);
 }
 
 // ── RPC: Create or find a match ──────────────────────────────────────────────
