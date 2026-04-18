@@ -176,34 +176,91 @@ This enables:
 Good for a single host setup.
 
 ## B) CockroachDB Cloud + Render + Vercel (recommended managed path)
-If your intended platform is:
-- **CockroachDB Cloud** for database
-- **Render** for Nakama/backend runtime
-- **Vercel** for frontend
 
-Use this process:
+This project is deployed using:
 
-1. **CockroachDB Cloud**
-   - Create a cluster and SQL user.
-   - Allow inbound network from Render.
-   - Create database/schema expected by Nakama.
+CockroachDB CockroachDB Cloud (database)
+Render Render (Nakama backend)
+Vercel Vercel (React frontend)
+1️⃣ CockroachDB Cloud (Database Setup)
+Step 1: Create Cluster
+Log into CockroachDB Cloud
+Create a Serverless cluster
+Select region close to your users
 
-2. **Render (Nakama service)**
-   - Deploy Nakama container + mounted runtime module (`server/dist/main.js` bundled in `nakama/data/modules/index.js` workflow).
-   - Set env vars: `NAKAMA_SERVER_KEY`, console creds, and database connection settings.
-   - Expose ports/services so Nakama API is reachable via HTTPS (typically behind Render-managed TLS).
 
-3. **Vercel (React client)**
-   - Deploy `client/` as Vite project.
-   - Set Vercel environment variables:
-     - `VITE_NAKAMA_HOST` = your Render API domain
-     - `VITE_NAKAMA_PORT` = `443`
-     - `VITE_NAKAMA_SSL` = `true`
-     - `VITE_NAKAMA_KEY` = same Nakama server key
+Step 2: Create Database
+CREATE DATABASE <DATABASE_NAME>;
+Step 3: Create SQL User
+CREATE USER <DB_USER> WITH PASSWORD '<DB_PASSWORD>';
+Step 4: Grant Permissions
+GRANT ALL ON DATABASE <DATABASE_NAME> TO <DB_USER>;
+GRANT ALL ON SCHEMA public TO <DB_USER>;
 
-4. **CORS / networking checks**
-   - Ensure Nakama endpoint is publicly reachable from browser.
-   - Confirm websocket (wss) connectivity from Vercel origin.
+👉 Nakama will automatically create required tables (storage, leaderboard_record, etc.) during first startup.
+
+Step 5: Configure Network Access
+Go to Network Access
+Add:
+0.0.0.0/0
+
+👉 This allows your backend (Render) to connect.
+👉 In production, restrict this to specific IP ranges.
+
+Step 6: Connection String
+
+Format:
+
+postgresql://<DB_USER>:<DB_PASSWORD>@<HOST>:26257/<DATABASE_NAME>?sslmode=verify-full
+
+2️⃣ Render (Nakama Backend Deployment)
+Step 1: Create Web Service
+Platform: Docker
+Image:
+heroiclabs/nakama:<VERSION>
+Step 2: Add Runtime Module
+
+Ensure your compiled server file is placed at:
+
+/nakama/data/modules/index.js
+
+👉 This file contains your match handler and RPC logic.
+
+Step 3: Configure Environment Variables
+
+Set the following in Render:
+
+NAKAMA_SERVER_KEY=<SERVER_KEY>
+NAKAMA_CONSOLE_USERNAME=<ADMIN_USERNAME>
+NAKAMA_CONSOLE_PASSWORD=<ADMIN_PASSWORD>
+NAKAMA_DATABASE_ADDRESS=<CONNECTION_STRING>
+Step 4: Deploy & Verify
+
+After deployment:
+
+Backend URL will be:
+https://<RENDER_SERVICE_DOMAIN>
+Test health:
+curl https://<RENDER_SERVICE_DOMAIN>/healthcheck
+Step 5: Verify Nakama Console (Optional)
+
+Open:
+
+https://<RENDER_SERVICE_DOMAIN>/console
+
+Login using your console credentials.
+
+3️⃣ Vercel (Frontend Deployment)
+Step 1: Deploy Project
+Import repository into Vercel
+Select client/ as root
+Framework: Vite
+Step 2: Set Environment Variables
+VITE_NAKAMA_HOST=<RENDER_SERVICE_DOMAIN>
+VITE_NAKAMA_PORT=443
+VITE_NAKAMA_SSL=true
+VITE_NAKAMA_KEY=<SERVER_KEY>
+
 
 5. **Smoke test production**
    - Open two browser sessions.
