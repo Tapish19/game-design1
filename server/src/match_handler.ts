@@ -119,15 +119,14 @@ function writeStatsRecord(
   userId: string,
   record: StatsRecord
 ) {
-  const payload = {
+  nk.storageWrite([{
     collection: "player_stats",
     key: "record",
-    value: JSON.stringify(record),
+    userId: userId,
+    value: record,   // ✅ NO JSON.stringify
     permissionRead: 2,
     permissionWrite: 0,
-    userId,
-  };
-  nk.storageWrite([payload]);
+  }]);
 }
 
 function buildGameStatePayload(state: MatchState, presenceUserId?: string) {
